@@ -1,2 +1,2 @@
-python train.py --outdir=./training-runs --data=./datasets/afhq64cat.zip --gpus=1 --dry-run
-python train.py --outdir=./training-runs --data=./datasets/afhq64cat.zip --gpus=1
+python train.py --outdir=./training-runs --data=./datasets/afhq64cat.zip --gpus=1 --use_adaconv True --dry-run
+python train.py --outdir=./training-runs --data=./datasets/afhq64cat.zip --gpus=1 --use_adaconv True

@@ -64,6 +64,7 @@ def setup_training_loop_kwargs(
     workers=None,  # Override number of DataLoader workers: <int>, default = 3,
     # Our options
     sample_w_plus=None,
+    use_adaconv=None,
 ):
     args = dnnlib.EasyDict()
 
@@ -275,6 +276,7 @@ def setup_training_loop_kwargs(
     )
     # *
     args.G_kwargs.mapping_kwargs.sample_w_plus = sample_w_plus != None
+    args.G_kwargs.use_adaconv = use_adaconv != None
 
     args.D_kwargs = dnnlib.EasyDict(
         class_name="training.networks.Discriminator",
@@ -700,8 +702,9 @@ class CommaSeparatedList(click.ParamType):
     "--workers", help="Override number of DataLoader workers", type=int, metavar="INT"
 )
 
-# Out (adaconv) options
+# Our (adaconv) options
 @click.option("--sample_w_plus", type=bool, metavar="BOOL")
+@click.option("--use_adaconv", type=bool, metavar="BOOL")
 
 
 #
@@ -784,6 +787,7 @@ def main(ctx, outdir, dry_run, **config_kwargs):
     print(f"Dataset x-flips:    {args.training_set_kwargs.xflip}")
     print(f"---")
     print(f"Sample W+:    {args.G_kwargs.mapping_kwargs.sample_w_plus}")
+    print(f"Use Adaconv:    {args.G_kwargs.use_adaconv}")
     print()
 
     # Dry run?

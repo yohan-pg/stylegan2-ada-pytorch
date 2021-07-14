@@ -80,7 +80,7 @@ class StyleGAN2Loss(Loss):
         return logits
 
     def accumulate_gradients(self, phase, real_img, real_c, gen_z, gen_c, sync, gain):
-        with torch.autograd.set_detect_anomaly(False):
+        with torch.autograd.set_detect_anomaly(True):
             assert phase in ["Gmain", "Greg", "Gboth", "Dmain", "Dreg", "Dboth"]
             do_Gmain = phase in ["Gmain", "Gboth"]
             do_Dmain = phase in ["Dmain", "Dboth"]
