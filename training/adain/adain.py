@@ -35,7 +35,7 @@ class AdaIN(nn.Module):
         self._normalize = nn.InstanceNorm2d(num_features=self.num_image_channels)
 
         # * Linear layers work just fine with ndim=3 tensors (it transforms the vectors of the last dim),
-        # * just like if the first 2 dimensions we merged into a single one.
+        # * just like if the first 2 dimensions were merged into a single one.
         self._mean_projection = nn.Linear(
             self.style_size,
             self.num_image_channels,
@@ -49,8 +49,8 @@ class AdaIN(nn.Module):
         assert image.shape[1] == self.num_image_channels, image.shape
         assert style.shape[2] == self.style_size, style.shape
 
-        # * Take as many style vectors as we need
-        # *(the style may have more because it is typically replicated between layers)
+        # * Take as many style vectors as we need.
+        # * (the style may have more because it is typically replicated between layers)
 
         assert style.shape[1] >= self.num_required_style_vectors()
         style = style[

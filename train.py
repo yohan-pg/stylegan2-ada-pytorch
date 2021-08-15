@@ -308,6 +308,10 @@ def setup_training_loop_kwargs(
         r1_gamma=spec.gamma,
     )
 
+    # #!
+    # if args.G_kwargs.use_adaconv:
+    #     args.loss_kwargs.pl_weight = 0
+
     args.total_kimg = spec.kimg
     args.batch_size = spec.mb
     args.batch_gpu = spec.mb // spec.ref_gpus
@@ -319,6 +323,7 @@ def setup_training_loop_kwargs(
         args.loss_kwargs.style_mixing_prob = 0  # disable style mixing
         args.D_kwargs.architecture = "orig"  # disable residual skip connections
 
+    
     if gamma is not None:
         assert isinstance(gamma, float)
         if not gamma >= 0:
