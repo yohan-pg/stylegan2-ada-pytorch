@@ -421,7 +421,7 @@ class SynthesisLayer(torch.nn.Module):
 
         flip_weight = self.up == 1  # slightly faster
         x = modulated_conv2d(
-            x=self.adaconv(x, styles) if self.use_adaconv else x,
+            x=self.adaconv(x.to(dtype=styles.dtype), styles) if self.use_adaconv else x,
             weight=self.weight,
             styles=torch.ones(x.shape[0:2], device=x.device) if self.use_adaconv else styles,
             noise=noise,
@@ -430,7 +430,7 @@ class SynthesisLayer(torch.nn.Module):
             resample_filter=self.resample_filter,
             flip_weight=flip_weight,
             fused_modconv=fused_modconv,
-        )
+        ).to(dtype=x.dtype)
 
         act_gain = self.act_gain * gain
         act_clamp = self.conv_clamp * gain if self.conv_clamp is not None else None
@@ -484,12 +484,12 @@ class ToRGBLayer(torch.nn.Module):
             styles = w
             
         x = modulated_conv2d(
-            x=self.adaconv(x, w) if self.use_adaconv else x,
+            x=self.adaconv(x.to(dtype=w.dtype), w) if self.use_adaconv else x,
             weight=self.weight,
             styles=styles if not self.use_adaconv else torch.ones(x.shape[0:2], device=x.device),
             demodulate=False,
             fused_modconv=fused_modconv,
-        )
+        ).to(dtype=x.dtype)
         x = bias_act.bias_act(x, self.bias.to(x.dtype), clamp=self.conv_clamp)
         return x
 
@@ -586,7 +586,7 @@ class SynthesisBlock(torch.nn.Module):
                 channels_last=self.channels_last,
             )
 
-    def forward(self, x, img, ws, force_fp32=True, fused_modconv=None, **layer_kwargs): #! force fp32
+    def forward(self, x, img, ws, force_fp32=False, fused_modconv=None, **layer_kwargs): #! force fp32
         if self.use_adaconv:
             misc.assert_shape(ws, [None, 512, self.w_dim])
         else:
@@ -710,7 +710,7 @@ class SynthesisNetwork(torch.nn.Module):
             w_idx = 0
             for res in self.block_resolutions:
                 block = getattr(self, f"b{res}")
-                #! not a 1 for 1 modification
+                #! not a 1 for 1 modification, this kills style mixing regularization
                 block_ws.append(ws if self.use_adaconv else ws.narrow(1, w_idx, block.num_conv + block.num_torgb))
                 w_idx += block.num_conv
 
