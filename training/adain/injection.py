@@ -108,16 +108,17 @@ class AdaConvInjection(Injection):
 
         return conv_groups_to_batch(
             F.conv2d(
-                input=nn.ReflectionPad2d(self.kernel_size // 2)(
-                    batch_to_conv_groups(image)
-                ),
-                weight=scale.reshape(
+                input=batch_to_conv_groups(nn.ReflectionPad2d(self.kernel_size // 2)(
+                    image
+                )),
+                weight=scale.reshape( 
                     B * C,  # @ == grouped conv out_channels
                     C,  # @ == grouped conv in_channels (which is B * C) / num_conv_groups (which is B)
                     self.kernel_size,
                     self.kernel_size,
                 )
-                / math.sqrt(C),
+                / math.sqrt(C)
+                , 
                 groups=B,
             )
         )

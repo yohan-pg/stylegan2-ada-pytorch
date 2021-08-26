@@ -257,7 +257,7 @@ def setup_training_loop_kwargs(
         spec.ref_gpus = gpus
         res = args.training_set_kwargs.resolution
         spec.mb = max(
-            min(gpus * min(4096 // res, 32), 64), gpus
+            min(gpus * min(4096 // res, 16), 64), gpus #!!!!!!! should be 32
         )  # keep gpu memory consumption at bay
         spec.mbstd = min(
             spec.mb // gpus, 4
@@ -275,8 +275,8 @@ def setup_training_loop_kwargs(
         synthesis_kwargs=dnnlib.EasyDict(),
     )
     # *
-    args.G_kwargs.mapping_kwargs.sample_w_plus = sample_w_plus != None
-    args.G_kwargs.use_adaconv = use_adaconv != None
+    args.G_kwargs.mapping_kwargs.sample_w_plus = sample_w_plus is True
+    args.G_kwargs.use_adaconv = use_adaconv is True
 
     args.D_kwargs = dnnlib.EasyDict(
         class_name="training.networks.Discriminator",
@@ -319,6 +319,7 @@ def setup_training_loop_kwargs(
         args.loss_kwargs.style_mixing_prob = 0  # disable style mixing
         args.D_kwargs.architecture = "orig"  # disable residual skip connections
 
+    
     if gamma is not None:
         assert isinstance(gamma, float)
         if not gamma >= 0:
