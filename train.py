@@ -257,7 +257,7 @@ def setup_training_loop_kwargs(
         spec.ref_gpus = gpus
         res = args.training_set_kwargs.resolution
         spec.mb = max(
-            min(gpus * min(4096 // res, 32), 64), gpus
+            min(gpus * min(4096 // res, 16), 64), gpus #!!!!!!! should be 32
         )  # keep gpu memory consumption at bay
         spec.mbstd = min(
             spec.mb // gpus, 4
@@ -275,8 +275,8 @@ def setup_training_loop_kwargs(
         synthesis_kwargs=dnnlib.EasyDict(),
     )
     # *
-    args.G_kwargs.mapping_kwargs.sample_w_plus = sample_w_plus != None
-    args.G_kwargs.use_adaconv = use_adaconv != None
+    args.G_kwargs.mapping_kwargs.sample_w_plus = sample_w_plus is True
+    args.G_kwargs.use_adaconv = use_adaconv is True
 
     args.D_kwargs = dnnlib.EasyDict(
         class_name="training.networks.Discriminator",
@@ -307,10 +307,6 @@ def setup_training_loop_kwargs(
         class_name="training.loss.StyleGAN2Loss",
         r1_gamma=spec.gamma,
     )
-
-    # #!
-    # if args.G_kwargs.use_adaconv:
-    #     args.loss_kwargs.pl_weight = 0
 
     args.total_kimg = spec.kimg
     args.batch_size = spec.mb

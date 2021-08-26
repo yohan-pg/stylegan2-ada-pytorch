@@ -59,15 +59,15 @@ class StyleGAN2Loss(Loss):
                 with torch.autograd.profiler.record_function("style_mixing"):
                     cutoff = torch.empty(
                         [], dtype=torch.int64, device=ws.device
-                    ).random_(1, ws.shape[1])
+                    ).random_(1, ws.shape[1]) # * Picks a number, say '5'
                     cutoff = torch.where(
                         torch.rand([], device=ws.device) < self.style_mixing_prob,
                         cutoff,
                         torch.full_like(cutoff, ws.shape[1]),
-                    )
+                    ) # * Randomly chooses to apply the cutoff or not with probability 'style_mixing_prob' (returns a sentinel value)
                     ws[:, cutoff:] = self.G_mapping(
                         torch.randn_like(z), c, skip_w_avg_update=True
-                    )[:, cutoff:]
+                    )[:, cutoff:] # * Update up to the cutoff using the mapper (if we aren't applying it, update the entire vector)
         with misc.ddp_sync(self.G_synthesis, sync):
             img = self.G_synthesis(ws)
         return img, ws
@@ -104,7 +104,7 @@ class StyleGAN2Loss(Loss):
                     loss_Gmain.mean().mul(gain).backward()
 
             # Gpl: Apply path length regularization.
-            # if do_Gpl: #!!!
+            # if do_Gpl: #!!! gpl starts SUPER HIGH with adaconv
             #     with torch.autograd.profiler.record_function("Gpl_forward"):
             #         batch_size = gen_z.shape[0] // self.pl_batch_shrink
             #         gen_img, gen_ws = self.run_G(

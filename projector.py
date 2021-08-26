@@ -22,6 +22,9 @@ import torch.nn.functional as F
 import dnnlib
 import legacy
 
+from torchvision.utils import save_image
+from interpolator import interpolate_images
+
 
 def project(
     G,
@@ -34,13 +37,17 @@ def project(
     lr_rampdown_length=0.25,
     lr_rampup_length=0.05,
     noise_ramp_length=0.75,
-    regularize_noise_weight=1e5,
-    optimize_noise=True,  
+    regularize_noise_weight=1e5, 
     verbose=False,
     device: torch.device,
+    use_vgg=True,
+    optimize_noise=True,
+    schedule_lr=True,
+    add_noise_to_w=True, 
+    w_plus=False, 
 ):
     assert target.shape == (G.img_channels, G.img_resolution, G.img_resolution)
-
+    
     def logprint(*args):
         if verbose:
             print(*args)
@@ -68,13 +75,18 @@ def project(
         vgg16 = torch.jit.load(f).eval().to(device)
 
     # Features for target image.
-    target_images = target.unsqueeze(0).to(device).to(torch.float32)
-    if target_images.shape[2] > 256:
-        target_images = F.interpolate(target_images, size=(256, 256), mode="area")
-    target_features = vgg16(target_images, resize_images=False, return_lpips=True)
+    target_images_large = target.unsqueeze(0).to(device).to(torch.float32)
+    if target_images_large.shape[2] > 256:
+        target_images = F.interpolate(target_images_large, size=(256, 256), mode="area")
+    else:
+        target_images = target_images_large
+    target_features = vgg16(target_images.clone(), resize_images=False, return_lpips=True)
 
     w_opt = torch.tensor(
-        w_avg, dtype=torch.float32, device=device, requires_grad=True
+        torch.tensor(w_avg).repeat(1, G.num_ws, 1) if w_plus else w_avg,
+        dtype=torch.float32,
+        device=device,
+        requires_grad=True,
     )  # pylint: disable=not-callable
     w_out = torch.zeros(
         [num_steps] + list(w_opt.shape[1:]), dtype=torch.float32, device=device
@@ -94,28 +106,44 @@ def project(
         # Learning rate schedule.
         t = step / num_steps
         w_noise_scale = (
-            w_std * initial_noise_factor * max(0.0, 1.0 - t / noise_ramp_length) ** 2
-        )
-        lr_ramp = min(1.0, (1.0 - t) / lr_rampdown_length)
-        lr_ramp = 0.5 - 0.5 * np.cos(lr_ramp * np.pi)
-        lr_ramp = lr_ramp * min(1.0, t / lr_rampup_length)
-        lr = initial_learning_rate * lr_ramp
-        for param_group in optimizer.param_groups:
-            param_group["lr"] = lr
+                w_std * initial_noise_factor * max(0.0, 1.0 - t / noise_ramp_length) ** 2
+            )
+        if schedule_lr:
+            lr_ramp = min(1.0, (1.0 - t) / lr_rampdown_length)
+            lr_ramp = 0.5 - 0.5 * np.cos(lr_ramp * np.pi)
+            lr_ramp = lr_ramp * min(1.0, t / lr_rampup_length)
+            lr = initial_learning_rate * lr_ramp
+            for param_group in optimizer.param_groups:
+                param_group["lr"] = lr
 
         # Synth images from opt_w.
         w_noise = torch.randn_like(w_opt) * w_noise_scale
-        ws = (w_opt + w_noise).repeat([1, G.mapping.num_ws, 1])
-        synth_images = G.synthesis(ws, noise_mode="const")
+        ws = (w_opt + w_noise) if add_noise_to_w else w_opt
+        synth_images = G.synthesis(
+            ws if w_plus else ws.repeat([1, G.mapping.num_ws, 1]), noise_mode="const"
+        )
 
-        # Downsample image to 256x256 if it's larger than that. VGG was built for 224x224 images.
-        synth_images = (synth_images + 1) * (255 / 2)
-        if synth_images.shape[2] > 256:
-            synth_images = F.interpolate(synth_images, size=(256, 256), mode="area")
+        if step % 100 == 0:
+            A = target_images_large / 255.0
+            B = (synth_images + 1) / 2
+            save_image(
+                torch.cat(
+                    (A, B, (A - B).abs())
+                ),
+                "out/optim_progress.png"
+            )
 
-        # Features for synth images.
-        synth_features = vgg16(synth_images, resize_images=False, return_lpips=True)
-        dist = (target_features - synth_features).square().sum()
+        if use_vgg:
+            # Downsample image to 256x256 if it's larger than that. VGG was built for 224x224 images.
+            synth_images = (synth_images + 1) * (255 / 2)
+            if synth_images.shape[2] > 256:
+                synth_images = F.interpolate(synth_images, size=(256, 256), mode="area")
+
+            # Features for synth images.
+            synth_features = vgg16(synth_images, resize_images=False, return_lpips=True)
+            dist = (target_features - synth_features).square().sum()
+        else:
+            dist = torch.nn.L1Loss()((synth_images + 1) / 2, target_images_large / 255.0)
 
         # Noise regularization.
         reg_loss = 0.0
@@ -146,11 +174,12 @@ def project(
                 buf -= buf.mean()
                 buf *= buf.square().mean().rsqrt()
 
-    return w_out.repeat([1, G.mapping.num_ws, 1])
+    return w_out if w_plus else w_out.repeat([1, G.mapping.num_ws, 1])
 
 
 # ----------------------------------------------------------------------------
 
+kwargs = {}
 
 @click.command()
 @click.option("--network", "network_pkl", help="Network pickle filename", required=True)
@@ -165,7 +194,7 @@ def project(
     "--num-steps",
     help="Number of optimization steps",
     type=int,
-    default=1000,
+    default=1000, 
     show_default=True,
 )
 @click.option("--seed", help="Random seed", type=int, default=303, show_default=True)
@@ -173,7 +202,7 @@ def project(
     "--save-video",
     help="Save an mp4 video of optimization progress",
     type=bool,
-    default=True,
+    default=False,
     show_default=True,
 )
 @click.option(
@@ -185,7 +214,7 @@ def run_projection(
     outdir: str,
     save_video: bool,
     seed: int,
-    num_steps: int,
+    num_steps: int
 ):
     """Project given image to the latent space of pretrained network pickle.
 
@@ -195,6 +224,11 @@ def run_projection(
     python projector.py --outdir=out --target=~/mytargetimg.png \\
         --network=https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/ffhq.pkl
     """
+    global kwargs
+    outdir += "|" + "_".join([":".join(map(str, x)) for x in kwargs.items()])
+    print("---------------------")
+    print(outdir)
+    os.makedirs(outdir, exist_ok=True)
     np.random.seed(seed)
     torch.manual_seed(seed)
 
@@ -203,13 +237,8 @@ def run_projection(
     device = torch.device("cuda")
     with dnnlib.util.open_url(network_pkl) as fp:
         G = legacy.load_network_pkl(fp)["G_ema"].requires_grad_(False).to(device)  # type: ignore
-    
-    from training import networks
 
-    #!!!!!!!
-    G = networks.Generator(*G.init_args, **G.init_kwargs).to(
-        device
-    )
+    from training import networks
 
     # Load target image.
     target_pil = PIL.Image.open(target_fname).convert("RGB")
@@ -225,6 +254,7 @@ def run_projection(
 
     # Optimize projection.
     start_time = perf_counter()
+    
     projected_w_steps = project(
         G,
         target=torch.tensor(
@@ -233,11 +263,11 @@ def run_projection(
         num_steps=num_steps,
         device=device,
         verbose=True,
+        **kwargs
     )
     print(f"Elapsed: {(perf_counter()-start_time):.1f} s")
 
     # Render debug output: optional video and projected image and W vector.
-    os.makedirs(outdir, exist_ok=True)
     if save_video:
         video = imageio.get_writer(
             f"{outdir}/proj.mp4", mode="I", fps=10, codec="libx264", bitrate="16M"
@@ -267,10 +297,16 @@ def run_projection(
     PIL.Image.fromarray(synth_image, "RGB").save(f"{outdir}/proj.png")
     np.savez(f"{outdir}/projected_w.npz", w=projected_w.unsqueeze(0).cpu().numpy())
 
-
 # ----------------------------------------------------------------------------
 
+def run_with_options(**local_kwargs):
+    global kwargs 
+    kwargs = local_kwargs
+    run_projection()
+
 if __name__ == "__main__":
-    run_projection()  # pylint: disable=no-value-for-parameter
+    # run_with_options(w_plus=False, optimize_noise=False)
+    run_with_options(w_plus=False, schedule_lr=False)
+    # run_with_options(w_plus=False, add_noise_to_w=False)  
 
 # ----------------------------------------------------------------------------

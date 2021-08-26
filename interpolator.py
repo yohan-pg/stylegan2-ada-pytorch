@@ -74,12 +74,19 @@ def interpolate_images(
 #         for y in styles[i + 1 :]:
 #             interpolate_images(x, y)
 #             print()
+# if __name__ == "__main__":
+#     styles = ["./out/real1a", "./out/real1b"]
+#     for i, x in enumerate(styles):
+#         for y in styles[i + 1 :]:
+#             interpolate_images(x, y, "./pretrained/stylegan2-ffhq-config-f.pkl")
+#             print()
 
 if __name__ == "__main__":
-    styles = ["./out/real1", "./out/real2", "./out/fake1", "./out/fake2"]
+    import sys 
+    styles = sys.argv[2:]
     for i, x in enumerate(styles):
         for y in styles[i + 1 :]:
-            interpolate_images(x, y, "./pretrained/stylegan2-ffhq-config-f.pkl")
+            interpolate_images(x, y, sys.argv[1])
             print()
 
 # ----------------------------------------------------------------------------
