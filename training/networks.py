@@ -14,7 +14,7 @@ from torch_utils.ops import conv2d_resample
 from torch_utils.ops import upfirdn2d
 from torch_utils.ops import bias_act
 from torch_utils.ops import fma
-from .adain import *
+import math 
 
 # ----------------------------------------------------------------------------
 
@@ -24,6 +24,50 @@ def normalize_2nd_moment(x, dim=1, eps=1e-8):
     return x * (x.square().mean(dim=dim, keepdim=True) + eps).rsqrt()
 
 
+
+
+# ----------------------------------------------------------------------------
+
+
+@persistence.persistent_class
+class FullyConnectedLayer(torch.nn.Module):
+    def __init__(
+        self,
+        in_features,  # Number of input features.
+        out_features,  # Number of output features.
+        bias=True,  # Apply additive bias before the activation function?
+        activation="linear",  # Activation function: 'relu', 'lrelu', etc.
+        lr_multiplier=1,  # Learning rate multiplier.
+        bias_init=0,  # Initial value for the additive bias.
+    ):
+        super().__init__()
+        self.activation = activation
+        self.weight = torch.nn.Parameter(
+            torch.randn([out_features, in_features]) / lr_multiplier
+        )
+        self.bias = (
+            torch.nn.Parameter(torch.full([out_features], np.float32(bias_init)))
+            if bias
+            else None
+        )
+        self.weight_gain = lr_multiplier / np.sqrt(in_features)
+        self.bias_gain = lr_multiplier
+
+    def forward(self, x):
+        w = self.weight.to(x.dtype) * self.weight_gain
+        b = self.bias
+        if b is not None:
+            b = b.to(x.dtype)
+            if self.bias_gain != 1:
+                b = b * self.bias_gain
+
+        if self.activation == "linear" and b is not None:
+            x = torch.addmm(b.unsqueeze(0), x, w.t())
+        else:
+            x = x.matmul(w.t())
+            x = bias_act.bias_act(x, b, act=self.activation)
+        return x
+        
 # ----------------------------------------------------------------------------
 
 
@@ -45,10 +89,16 @@ def modulated_conv2d(
     out_channels, in_channels, kh, kw = weight.shape
     misc.assert_shape(weight, [out_channels, in_channels, kh, kw])  # [OIkk]
     misc.assert_shape(x, [batch_size, in_channels, None, None])  # [NIHW]
-    misc.assert_shape(styles, [batch_size, in_channels])  # [NI]
+    if styles.ndim == 2:
+        misc.assert_shape(styles, [batch_size, in_channels])  # [NI] #!
+    else:
+        pass #!!!
+        # misc.assert_shape(styles, [batch_size, in_channels, in_channels])
 
     # Pre-normalize inputs to avoid FP16 overflow.
     if x.dtype == torch.float16 and demodulate:
+        print("float16 unsupported")
+        quit()
         weight = weight * (
             1
             / np.sqrt(in_channels * kh * kw)
@@ -61,14 +111,34 @@ def modulated_conv2d(
     dcoefs = None
     if demodulate or fused_modconv:
         w = weight.unsqueeze(0)  # [NOIkk]
-        w = w * styles.reshape(batch_size, 1, -1, 1, 1)  # [NOIkk]
+        
+        if styles.ndim == 3: # * We are using adaconv 
+            # def flip(k):
+            #     return torch.flip(k, (2, 3)).transpose(0, 1)
+
+            # def crosscorr(x, w, *args, **kwargs):
+            #     return torch.nn.functional.conv2d(x, w, *args, **kwargs)
+            
+            # s = styles[:, :w.shape[1], :w.shape[0]].unsqueeze(3).unsqueeze(4)
+            # w = torch.stack([
+            #     flip(crosscorr(flip(s), w[0], padding=3-1)) for s in s
+            # ])
+            
+            s = styles[:, :w.shape[1], :w.shape[2]].unsqueeze(3).unsqueeze(4)
+            k = 64
+            w = w * s[:, 0:k, :].repeat(1, w.shape[1] // k, 1, 1, 1)
+        else:
+            s = styles.reshape(batch_size, 1, -1, 1, 1) # [NOIkk]
+            w = w * s
     if demodulate:
         dcoefs = (w.square().sum(dim=[2, 3, 4]) + 1e-8).rsqrt()  # [NO]
     if demodulate and fused_modconv:
-        w = w * dcoefs.reshape(batch_size, -1, 1, 1, 1)  # [NOIkk]
-
+        w = w * dcoefs.reshape(batch_size, -1, 1, 1, 1)  # [NOIkk] 
+        
     # Execute by scaling the activations before and after the convolution.
     if not fused_modconv:
+        print("fused_modconv unsupported")
+        quit()
         x = x * styles.to(x.dtype).reshape(batch_size, -1, 1, 1)
         x = conv2d_resample.conv2d_resample(
             x=x,
@@ -225,7 +295,7 @@ class MappingNetwork(torch.nn.Module):
         features_list = (
             [z_dim + embed_features] + [layer_features] * (num_layers - 1) + [w_dim]
         )
-
+        
         if c_dim > 0:
             self.embed = FullyConnectedLayer(c_dim, embed_features)
         for idx in range(num_layers):
@@ -259,7 +329,7 @@ class MappingNetwork(torch.nn.Module):
         # Main layers.
         for idx in range(self.num_layers):
             layer = getattr(self, f"fc{idx}")
-            x = layer(x).clone() #!!!! can't clone this here...
+            x = layer(x)
 
         # Update moving average of W.
         if self.w_avg_beta is not None and self.training and not skip_w_avg_update:
@@ -284,29 +354,26 @@ class MappingNetwork(torch.nn.Module):
     def forward(self, z, c, **kwargs):
         assert self.num_ws is not None
 
-        if not self.sample_w_plus and not self.sample_for_adaconv:
-            with torch.autograd.profiler.record_function("broadcast"):
+        with torch.autograd.profiler.record_function("broadcast"):
+            if not self.sample_w_plus and not self.sample_for_adaconv:
+                    return (
+                        self._forward(z, c, **kwargs)
+                        .unsqueeze(1)
+                        .repeat([1, self.num_ws, 1])
+                    )
+            else:
+                num_samples = (self.num_ws if self.sample_w_plus else 1) * (
+                    self.num_adaconv_vectors if self.sample_for_adaconv else 1
+                )
+                z = torch.randn(z.shape[0] * num_samples, z.shape[1], device=z.device)
                 return (
                     self._forward(z, c, **kwargs)
                     .unsqueeze(1)
-                    .repeat([1, self.num_ws, 1])
+                    .reshape([-1, num_samples, self.w_dim])
                 )
-        else:
-            num_samples = (self.num_ws if self.sample_w_plus else 1) * (
-                self.num_adaconv_vectors if self.sample_for_adaconv else 1
-            )
-            z = torch.randn(z.shape[0] * num_samples, z.shape[1], device=z.device)
-            return (
-                self._forward(z, c, **kwargs)
-                .unsqueeze(1)
-                .reshape([-1, num_samples, self.w_dim])
-            )
 
 
 # ----------------------------------------------------------------------------
-
-ADACONV = AdaIN  # !!!
-
 
 @persistence.persistent_class
 class SynthesisLayer(torch.nn.Module):
@@ -342,14 +409,10 @@ class SynthesisLayer(torch.nn.Module):
         self.padding = kernel_size // 2
         self.act_gain = bias_act.activation_funcs[activation].def_gain
         self.use_adaconv = use_adaconv
+        self.w_dim = w_dim
+        self.in_channels = in_channels
 
-        if self.use_adaconv:
-            self.adaconv = ADACONV(
-                style_size=w_dim,
-                num_image_channels=in_channels,
-            )
-        else:
-            self.affine = FullyConnectedLayer(w_dim, in_channels, bias_init=1)
+        self.affine = FullyConnectedLayer(w_dim, in_channels, bias_init=1)
 
         memory_format = (
             torch.channels_last if channels_last else torch.contiguous_format
@@ -369,11 +432,13 @@ class SynthesisLayer(torch.nn.Module):
         in_resolution = self.resolution // self.up
         misc.assert_shape(x, [None, self.weight.shape[1], in_resolution, in_resolution])
 
-        if not self.use_adaconv:
-            styles = self.affine(w)
+        #! affine uses the same bias for every layer -> can't quite learn the skip in the same way
+        if self.use_adaconv:
+            styles = self.affine(w.reshape(-1, self.w_dim)).reshape(w.shape[0], w.shape[1], 
+            self.in_channels)
         else:
-            styles = w
-
+            styles = self.affine(w)
+        
         noise = None
         if self.use_noise and noise_mode == "random":
             noise = (
@@ -386,19 +451,21 @@ class SynthesisLayer(torch.nn.Module):
             noise = self.noise_const * self.noise_strength
 
         flip_weight = self.up == 1 # slightly faster
+
+        # if torch.rand(1).item() < 0.005: #!!! lol
+        #     print(f"{self.weight.mean():.02f} +- {self.weight.std():.02f} | {styles.mean():.02f} +- {styles.std():.02f}")
+
         x = modulated_conv2d(
-            x=self.adaconv(x.to(dtype=styles.dtype), styles) if self.use_adaconv else x,
+            x=x,
             weight=self.weight,
-            styles=torch.ones(x.shape[0:2], device=x.device)
-                    if self.use_adaconv
-                    else styles,
+            styles=styles,
             noise=noise,
             up=self.up,
             padding=self.padding,
             resample_filter=self.resample_filter,
             flip_weight=flip_weight,
             fused_modconv=fused_modconv,
-        ).to(dtype=x.dtype)
+        )
 
         act_gain = self.act_gain * gain
         act_clamp = self.conv_clamp * gain if self.conv_clamp is not None else None
@@ -442,44 +509,21 @@ class ToRGBLayer(torch.nn.Module):
         self.bias = torch.nn.Parameter(torch.zeros([out_channels]))
         self.weight_gain = 1 / np.sqrt(in_channels * (kernel_size ** 2))
         self.use_adaconv = use_adaconv
-        # if self.use_adaconv:
-        #     self.adaconv = ADACONV(
-        #         style_size=w_dim,
-        #         num_image_channels=in_channels,
-        #         normalize=False,
-        #         inject_new_mean=True,
-        #         apply_skip_through_rescaling=False
-        #     )
 
     def forward(self, x, w, fused_modconv=True): 
-        styles = self.affine(w[:, 0, :] if self.use_adaconv else w) * self.weight_gain 
+        #!
+        # if self.use_adaconv:
+        #     styles = self.affine(w.reshape(-1, self.w_dim)).reshape(w.shape[0], w.shape[1], 
+        #     self.in_channels) 
+        # else:
+        #     styles = self.affine(w) 
 
-        x = modulated_conv2d(
-            x=x,
-            weight=self.weight,
-            styles=styles,
-            demodulate=False,
-            fused_modconv=fused_modconv,
-        ).to(dtype=x.dtype)
+        styles = self.affine(w[:, 0, :] if self.use_adaconv else w)
+        styles = styles * self.weight_gain 
+
+        x = modulated_conv2d(x=x, weight=self.weight, styles=styles, demodulate=False, fused_modconv=fused_modconv)
         x = bias_act.bias_act(x, self.bias.to(x.dtype), clamp=self.conv_clamp)
         return x
-        # !!!!!!
-        # if not self.use_adaconv:
-        #     styles = self.affine(w) * self.weight_gain 
-        # else:
-        #     styles = w
-
-        # x = modulated_conv2d(
-        #     x=self.adaconv(x.to(dtype=w.dtype), w) if self.use_adaconv else x,
-        #     weight=self.weight,
-        #     styles=torch.ones(x.shape[0:2], device=x.device)
-        #     if self.use_adaconv
-        #     else styles,
-        #     demodulate=False,
-        #     fused_modconv=fused_modconv,
-        # ).to(dtype=x.dtype)
-        # x = bias_act.bias_act(x, self.bias.to(x.dtype), clamp=self.conv_clamp)
-        # return x
 
 
 # ----------------------------------------------------------------------------
@@ -597,6 +641,7 @@ class SynthesisBlock(torch.nn.Module):
                 fused_modconv = (not self.training) and (
                     dtype == torch.float32 or int(x.shape[0]) == 1
                 )
+                fused_modconv = True
 
         # Input.
         if self.in_channels == 0:
@@ -710,7 +755,8 @@ class SynthesisNetwork(torch.nn.Module):
                 block_ws.append(
                     ws
                     if self.use_adaconv
-                    else ws.narrow(1, w_idx, block.num_conv + block.num_torgb)
+                    else 
+                    ws.narrow(1, w_idx, block.num_conv + block.num_torgb)
                 )
                 w_idx += block.num_conv
 

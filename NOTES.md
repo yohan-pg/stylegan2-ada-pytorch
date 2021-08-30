@@ -1,28 +1,28 @@
 IDEAS
 -----
-- double check that it works
-    - Try with and without skip on AdaIN 
-    - Double check that our AdaIN gives the same thing as theirs
-    - Add a learnable parameter for the skip (mimics their adain)
-    - Try training without style injection... Can we still learn something using only the noise latents?
-    - Try training without the noise latents. 
-    - Try injecting at only one place.
-    - Try to add a normalization layer. In principle we should still be able to train (first try their code, then our adain, then their code).
-    - Try adding the bias back? This is what made the difference with genforce.
-    - Try injecting in a StyleGAN1?
+- try injecting more or less strongly
+- log syle std thru training 
+- Try training without the noise latents. 
+- try training with a fixed instead of a learnable bias for the affine layer
+- Try injecting at only one place.
+- blockwise diag
 
 PROBLEMS
 -----
-- stupid wasteful cloning in the mapper
-- Can't train on liszt - only tch works.
-- There seems to be a leaking memory problem. Is it the eval? -> no, we had it disabled...
 - PPL doesn't seems OK with adaconv.
-- Style mixing doesn't work.
+- Style mixing doesn't work. Letting is go though is what causes in-place errors, and then cloing ws at the end of the mapper tensor seems to have caused the memory leak!?! (I hope)
+- Can't train on liszt - only tch works.
+
+QUESTIONS
+-----
+what do the torgb layers do in sgan2?
 
 TODO
 -----
+- we got a performance regression in adain64? (it's the batch size?)
 - Measure training times
 - Plug in churches
+- What do the
 - Plug in FFHQ
 - Autoscreen in the training script
 - Train some comparative models

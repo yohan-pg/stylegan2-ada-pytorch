@@ -55,19 +55,25 @@ class StyleGAN2Loss(Loss):
     def run_G(self, z, c, sync):
         with misc.ddp_sync(self.G_mapping, sync):
             ws = self.G_mapping(z, c)
-            if self.style_mixing_prob > 0:
-                with torch.autograd.profiler.record_function("style_mixing"):
-                    cutoff = torch.empty(
-                        [], dtype=torch.int64, device=ws.device
-                    ).random_(1, ws.shape[1]) # * Picks a number, say '5'
-                    cutoff = torch.where(
-                        torch.rand([], device=ws.device) < self.style_mixing_prob,
-                        cutoff,
-                        torch.full_like(cutoff, ws.shape[1]),
-                    ) # * Randomly chooses to apply the cutoff or not with probability 'style_mixing_prob' (returns a sentinel value)
-                    ws[:, cutoff:] = self.G_mapping(
-                        torch.randn_like(z), c, skip_w_avg_update=True
-                    )[:, cutoff:] # * Update up to the cutoff using the mapper (if we aren't applying it, update the entire vector)
+
+        # *** Style mixing
+        #!!!    
+        # if self.style_mixing_prob > 0:
+        #     with torch.autograd.profiler.record_function("style_mixing"):
+        #         cutoff = torch.empty(
+        #             [], dtype=torch.int64, device=ws.device
+        #         ).random_(1, ws.shape[1]) # * Picks a number, say '5'
+        #         cutoff = torch.where(
+        #             torch.rand([], device=ws.device) < self.style_mixing_prob,
+        #             cutoff,
+        #             torch.full_like(cutoff, ws.shape[1]),
+        #         ) # * Randomly chooses to apply the cutoff or not with probability 'style_mixing_prob' (returns a sentinel value)
+        #         ws = torch.cat((
+        #             ws[:, :cutoff],
+        #             self.G_mapping(
+        #                 torch.randn_like(z), c, skip_w_avg_update=True
+        #             )[:, cutoff:]
+        #         ), dim=1)  # * Update up to the cutoff using the mapper (if we aren't applying it, update the entire vector)
         with misc.ddp_sync(self.G_synthesis, sync):
             img = self.G_synthesis(ws)
         return img, ws
@@ -80,7 +86,7 @@ class StyleGAN2Loss(Loss):
         return logits
 
     def accumulate_gradients(self, phase, real_img, real_c, gen_z, gen_c, sync, gain):
-        with torch.autograd.set_detect_anomaly(True):
+        with torch.autograd.set_detect_anomaly(False): 
             assert phase in ["Gmain", "Greg", "Gboth", "Dmain", "Dreg", "Dboth"]
             do_Gmain = phase in ["Gmain", "Gboth"]
             do_Dmain = phase in ["Dmain", "Dboth"]

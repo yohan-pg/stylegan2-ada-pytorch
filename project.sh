@@ -7,8 +7,6 @@ case $1 in
 
         python projector.py --outdir=out/church2 --target=datasets/chruch_samples/church2.png \
             --network=./pretrained/stylegan2-church-config-f.pkl
-
-        # python interpolator.py ./pretrained/stylegan2-church-config-f.pkl out/church1 out/church2
     ;;
     ffhq*) 
         python projector.py --outdir=out/real1 --target=./datasets/ffhq_samples/00015.png \
@@ -16,8 +14,27 @@ case $1 in
 
         python projector.py --outdir=out/real2 --target=./datasets/ffhq_samples/00018.png \
             --network=./pretrained/ffhq.pkl
+    ;;
+    car-c*) 
+        python projector.py --outdir=out/real1 --target=./datasets/ffhq_samples/00015.png \
+            --network=pretrained/stylegan2-car-config-c.pkl
 
-        # python interpolator.py ./pretrained/ffhq.pkl out/real1 out/real2
+        python projector.py --outdir=out/real2 --target=./datasets/ffhq_samples/00018.png \
+            --network=pretrained/stylegan2-car-config-c.pkl
+    ;;
+    car-d*) 
+        python projector.py --outdir=out/real1 --target=./datasets/ffhq_samples/00015.png \
+            --network=pretrained/stylegan2-car-config-d.pkl
+
+        python projector.py --outdir=out/real2 --target=./datasets/ffhq_samples/00018.png \
+            --network=pretrained/stylegan2-car-config-d.pkl
+    ;;
+    car-f*) 
+        python projector.py --outdir=out/real1 --target=./datasets/ffhq_samples/00015.png \
+            --network=pretrained/stylegan2-car-config-f.pkl
+
+        python projector.py --outdir=out/real2 --target=./datasets/ffhq_samples/00018.png \
+            --network=pretrained/stylegan2-car-config-f.pkl
     ;;
     *) echo "No such dataset."
 esac

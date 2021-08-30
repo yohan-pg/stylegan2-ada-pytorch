@@ -1,3 +1,14 @@
+# Resolution 32
+
+GPU #1 only:
+
+GPU #2 only:
+
+2 GPUs:
+
+
+*5M images training time: -*
+
 # Resolution 64
 
 GPU #1 only:
