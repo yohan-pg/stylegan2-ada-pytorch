@@ -6,5 +6,6 @@ __pycache__/
 /stylegan2/
 /out/
 /pretrained/
+/results/
 /extensions/
 stylegan2.tar.gz
