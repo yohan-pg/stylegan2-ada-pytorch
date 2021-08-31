@@ -1,1 +1,1 @@
-conda activate stylegan2
+source stylegan2/bin/activate
