@@ -188,6 +188,18 @@ def setup_training_loop_kwargs(
             ramp=0.05,
             map=2,
         ),  # Populated dynamically based on resolution and GPU count.
+        "custom": dict(
+            ref_gpus=-1,
+            kimg=25000,
+            mb=-1,
+            mbstd=-1,
+            fmaps=-1,
+            lrate=-1,
+            gamma=-1,
+            ema=-1,
+            ramp=0.05,
+            map=0,
+        ),  # Populated dynamically based on resolution and GPU count.
         "stylegan2": dict(
             ref_gpus=8,
             kimg=25000,
@@ -252,7 +264,7 @@ def setup_training_loop_kwargs(
 
     assert cfg in cfg_specs
     spec = dnnlib.EasyDict(cfg_specs[cfg])
-    if cfg == "auto":
+    if cfg in ["auto", "custom"]:
         desc += f"{gpus:d}"
         spec.ref_gpus = gpus
         res = args.training_set_kwargs.resolution
@@ -275,8 +287,8 @@ def setup_training_loop_kwargs(
         synthesis_kwargs=dnnlib.EasyDict(),
     )
     # *
-    args.G_kwargs.mapping_kwargs.sample_w_plus = sample_w_plus != None
-    args.G_kwargs.use_adaconv = use_adaconv != None
+    args.G_kwargs.mapping_kwargs.sample_w_plus = sample_w_plus is True
+    args.G_kwargs.use_adaconv = use_adaconv is True
 
     args.D_kwargs = dnnlib.EasyDict(
         class_name="training.networks.Discriminator",
@@ -319,6 +331,12 @@ def setup_training_loop_kwargs(
         args.loss_kwargs.style_mixing_prob = 0  # disable style mixing
         args.D_kwargs.architecture = "orig"  # disable residual skip connections
 
+    if cfg == "custom":
+        args.loss_kwargs.pl_weight = 0  # disable path length regularization
+        args.loss_kwargs.style_mixing_prob = 0  # disable style mixing
+        args.loss_kwargs.r1_gamma = 10 # disable discr gamma
+    
+    
     if gamma is not None:
         assert isinstance(gamma, float)
         if not gamma >= 0:
@@ -645,7 +663,7 @@ class CommaSeparatedList(click.ParamType):
     "--cfg",
     help="Base config [default: auto]",
     type=click.Choice(
-        ["auto", "stylegan2", "paper256", "paper512", "paper1024", "cifar"]
+        ["auto", "stylegan2", "paper256", "paper512", "paper1024", "cifar", "custom"]
     ),
 )
 @click.option("--gamma", help="Override R1 gamma", type=float)

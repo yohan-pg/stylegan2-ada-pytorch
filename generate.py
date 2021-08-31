@@ -62,6 +62,14 @@ def num_range(s: str) -> List[int]:
     default="const",
     show_default=True,
 )
+@click.option(
+    "--random-offset",
+    "random_offset",
+    help="Offset Randomly",
+    type=float,
+    default=0.0,
+    show_default=True,
+)
 @click.option("--projected-w", help="Projection result file", type=str, metavar="FILE")
 @click.option(
     "--outdir",
@@ -76,6 +84,7 @@ def generate_images(
     seeds: Optional[List[int]],
     truncation_psi: float,
     noise_mode: str,
+    random_offset: float,
     outdir: str,
     class_idx: Optional[int],
     projected_w: Optional[str],

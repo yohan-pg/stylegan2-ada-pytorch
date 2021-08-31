@@ -1,0 +1,1 @@
+- memory starts at 9GB. Why do we ever go over 12GB?

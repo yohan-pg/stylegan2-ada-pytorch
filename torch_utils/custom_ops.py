@@ -83,6 +83,7 @@ def get_plugin(module_name, sources, **build_kwargs):
         # environment variable is set (we take this as a signal that the user
         # actually cares about this.)
         source_dirs_set = set(os.path.dirname(source) for source in sources)
+        
         if len(source_dirs_set) == 1 and ("TORCH_EXTENSIONS_DIR" in os.environ):
             all_source_files = sorted(
                 list(x for x in Path(list(source_dirs_set)[0]).iterdir() if x.is_file())
@@ -98,7 +99,6 @@ def get_plugin(module_name, sources, **build_kwargs):
                 module_name, verbose=verbose_build
             )  # pylint: disable=protected-access
             digest_build_dir = os.path.join(build_dir, hash_md5.hexdigest())
-
             if not os.path.isdir(digest_build_dir):
                 os.makedirs(digest_build_dir, exist_ok=True)
                 baton = FileBaton(os.path.join(digest_build_dir, "lock"))

@@ -1,0 +1,1 @@
+rm -r /home-local/yopog.nobkp/.cache/torch_extensions
