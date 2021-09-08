@@ -44,7 +44,8 @@ def project(
     optimize_noise=True,
     schedule_lr=True,
     add_noise_to_w=True, 
-    w_plus=False, 
+    w_plus=True, 
+    optimize_on_z=False
 ):
     assert target.shape == (G.img_channels, G.img_resolution, G.img_resolution)
     
@@ -55,12 +56,24 @@ def project(
     G = copy.deepcopy(G).eval().requires_grad_(False).to(device)  # type: ignore
 
     # Compute w stats.
-    logprint(f"Computing W midpoint and stddev using {w_avg_samples} samples...")
-    z_samples = np.random.RandomState(123).randn(w_avg_samples, G.z_dim)
-    w_samples = G.mapping(torch.from_numpy(z_samples).to(device), None)  # [N, L, C]
-    w_samples = w_samples[:, :1, :].cpu().numpy().astype(np.float32)  # [N, 1, C]
-    w_avg = np.mean(w_samples, axis=0, keepdims=True)  # [1, 1, C]
-    w_std = (np.sum((w_samples - w_avg) ** 2) / w_avg_samples) ** 0.5
+    if optimize_on_z:
+        z_opt = torch.randn(1, G.z_dim) 
+    else:
+        logprint(f"Computing W midpoint and stddev using {w_avg_samples} samples...")
+        z_samples = np.random.RandomState(123).randn(w_avg_samples, G.z_dim)
+        w_samples = G.mapping(torch.from_numpy(z_samples).to(device), None)  # [N, L, C]
+        w_samples = w_samples[:, :1, :].cpu().numpy().astype(np.float32)  # [N, 1, C]
+        w_avg = np.mean(w_samples, axis=0, keepdims=True)  # [1, 1, C]
+        w_std = (np.sum((w_samples - w_avg) ** 2) / w_avg_samples) ** 0.5
+        w_opt = torch.tensor(
+            torch.tensor(w_avg).repeat(1, G.num_ws, 1) if w_plus else w_avg,
+            dtype=torch.float32,
+            device=device,
+            requires_grad=True,
+        )  # pylint: disable=not-callable
+        w_out = torch.zeros(
+            [num_steps] + list(w_opt.shape[1:]), dtype=torch.float32, device=device
+        )
 
     # Setup noise inputs.
     noise_bufs = {
@@ -82,17 +95,8 @@ def project(
         target_images = target_images_large
     target_features = vgg16(target_images.clone(), resize_images=False, return_lpips=True)
 
-    w_opt = torch.tensor(
-        torch.tensor(w_avg).repeat(1, G.num_ws, 1) if w_plus else w_avg,
-        dtype=torch.float32,
-        device=device,
-        requires_grad=True,
-    )  # pylint: disable=not-callable
-    w_out = torch.zeros(
-        [num_steps] + list(w_opt.shape[1:]), dtype=torch.float32, device=device
-    )
     optimizer = torch.optim.Adam(
-        [w_opt] + (list(noise_bufs.values()) if optimize_noise else []),
+        [z_opt if optimize_on_z else w_opt] + (list(noise_bufs.values()) if optimize_noise else []),
         betas=(0.9, 0.999),
         lr=initial_learning_rate,
     )
@@ -115,10 +119,16 @@ def project(
             lr = initial_learning_rate * lr_ramp
             for param_group in optimizer.param_groups:
                 param_group["lr"] = lr
-
+        
         # Synth images from opt_w.
-        w_noise = torch.randn_like(w_opt) * w_noise_scale
-        ws = (w_opt + w_noise) if add_noise_to_w else w_opt
+        if optimize_on_z:
+            assert not add_noise_to_w
+            assert not w_plus
+            w_opt = G.mapping(z_opt)
+            ws = w_opt.repeat([1, G.mapping.num_ws, 1])
+        else:
+            w_noise = torch.randn_like(w_opt) * w_noise_scale
+            ws = (w_opt + w_noise) if add_noise_to_w else w_opt
         synth_images = G.synthesis(
             ws if w_plus else ws.repeat([1, G.mapping.num_ws, 1]), noise_mode="const"
         )
@@ -305,8 +315,6 @@ def run_with_options(**local_kwargs):
     run_projection()
 
 if __name__ == "__main__":
-    # run_with_options(w_plus=False, optimize_noise=False)
-    run_with_options(w_plus=False, schedule_lr=False)
-    # run_with_options(w_plus=False, add_noise_to_w=False)  
+    run_with_options()
 
 # ----------------------------------------------------------------------------
