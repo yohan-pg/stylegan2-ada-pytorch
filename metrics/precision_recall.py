@@ -74,7 +74,7 @@ def compute_pr(opts, max_real, num_gen, nhood_size, row_batch_size, col_batch_si
 
     results = dict()
     for name, manifold, probes in [
-        ("precision", real_features, gen_features),
+        ("precision", real_features, gen_features), 
         ("recall", gen_features, real_features),
     ]:
         kth = []
@@ -106,6 +106,64 @@ def compute_pr(opts, max_real, num_gen, nhood_size, row_batch_size, col_batch_si
             torch.cat(pred).to(torch.float32).mean() if opts.rank == 0 else "nan"
         )
     return results["precision"], results["recall"]
+
+
+
+
+def compute_avg_min_dist(opts, max_real, num_gen, row_batch_size, col_batch_size):
+    detector_url = "https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/metrics/vgg16.pt"
+    detector_kwargs = dict(return_features=True)
+
+    real_features = (
+        metric_utils.compute_feature_stats_for_dataset(
+            opts=opts,
+            detector_url=detector_url,
+            detector_kwargs=detector_kwargs,
+            rel_lo=0,
+            rel_hi=0,
+            capture_all=True,
+            max_items=max_real,
+        )
+        .get_all_torch()
+        .to(torch.float16)
+        .to(opts.device)
+    )
+
+    gen_features = (
+        metric_utils.compute_feature_stats_for_generator(
+            opts=opts,
+            detector_url=detector_url,
+            detector_kwargs=detector_kwargs,
+            rel_lo=0,
+            rel_hi=1,
+            capture_all=True,
+            max_items=num_gen,
+        )
+        .get_all_torch()
+        .to(torch.float16)
+        .to(opts.device)
+    )
+
+    results = dict()
+    for name, manifold, probes in [
+        ("avg-dist-recall", gen_features, real_features),
+    ]:
+        pred = []
+        for probes_batch in probes.split(row_batch_size):
+            dist = compute_distances(
+                row_features=probes_batch,
+                col_features=manifold,
+                num_gpus=opts.num_gpus,
+                rank=opts.rank,
+                col_batch_size=col_batch_size,
+            )
+            pred.append(dist.to(torch.float32).min(dim=1).values if opts.rank == 0 else None)
+        results[name] = float(
+            # torch.cat(pred).to(torch.float32).mean() if opts.rank == 0 else "nan",
+            torch.cat(pred).to(torch.float32).median() if opts.rank == 0 else "nan",
+        )
+    return results["avg-dist-recall"]
+
 
 
 # ----------------------------------------------------------------------------

@@ -121,6 +121,32 @@ def pr50k3_full(opts):
     )
     return dict(pr50k3_full_precision=precision, pr50k3_full_recall=recall)
 
+@register_metric
+def pr50k3_ours(opts):
+    opts.dataset_kwargs.update(max_size=None, xflip=False)
+    precision, recall = precision_recall.compute_pr(
+        opts,
+        max_real=20000,
+        num_gen=20000,
+        nhood_size=1000,
+        row_batch_size=10000,
+        col_batch_size=10000,
+    )
+    return dict(pr50k3_full_precision=precision, pr50k3_full_recall=recall)
+
+
+@register_metric
+def avg_min_dist(opts):
+    opts.dataset_kwargs.update(max_size=None, xflip=False)
+    avg_min_dist = precision_recall.compute_avg_min_dist(
+        opts,
+        max_real=5000,
+        num_gen=10000,
+        row_batch_size=10000,
+        col_batch_size=10000,
+    )
+    return dict(avg_min_dist=avg_min_dist)
+
 
 @register_metric
 def ppl2_wend(opts):
