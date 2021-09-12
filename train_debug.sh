@@ -4,5 +4,5 @@
 export CXX=g++
 export CUDA_VISIBLE_DEVICES=0
 
-python train.py --outdir="./training-runs/debug" --kimg 5000 --data=./datasets/afhq64cat.zip --metrics none --gpus=1 --snap 10
+python train.py --outdir="./training-runs/debug" --aug none --batch 8 --kimg 5000 --data=./datasets/afhq64cat.zip --metrics none --gpus=1 --snap 10
 
