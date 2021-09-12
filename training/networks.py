@@ -115,24 +115,14 @@ def modulated_conv2d(
     w = weight.unsqueeze(0)  # [NOIkk]
 
     if styles.ndim == 3:  # * We are using adaconv
-        K = 512
-        num_vecs = min(w.shape[1], K)
-        num_copies = w.shape[1] // num_vecs
         s = styles[:, :w.shape[1], :w.shape[2]].unsqueeze(3).unsqueeze(4)
-        # s1 = styles[:, 510:511, :w.shape[2]].unsqueeze(3).unsqueeze(4)
-        # w = w * ((s.repeat(1, num_copies, 1, 1, 1) + s1.repeat(1, w.shape[1], 1, 1, 1)))
-        
-        w = w * s.repeat(1, num_copies, 1, 1, 1) 
-        if demodulate:
-            dcoefs = (w.square().sum(dim=[2, 3, 4]) + 1e-8).rsqrt()  # [NO]
-            w = w * dcoefs.reshape(-1, w.shape[1], 1, 1, 1)  # [NOIkk] 
-
+        w = w * s
     else:
         s = styles.reshape(batch_size, 1, -1, 1, 1)  # [NOIkk]
         w = w * s
-        if demodulate:
-            dcoefs = (w.square().sum(dim=[2, 3, 4]) + 1e-8).rsqrt()  # [NO]
-            w = w * dcoefs.reshape(batch_size, -1, 1, 1, 1)  # [NOIkk] 
+    if demodulate:
+        dcoefs = (w.square().sum(dim=[2, 3, 4]) + 1e-8).rsqrt()  # [NO]
+        w = w * dcoefs.reshape(batch_size, -1, 1, 1, 1)  # [NOIkk] 
 
     # x = torch.nn.InstanceNorm2d(x.shape[1])(x) 
 
