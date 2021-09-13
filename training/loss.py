@@ -59,7 +59,8 @@ class StyleGAN2Loss(Loss):
         # *** Style mixing
         if self.style_mixing_prob > 0:
             with torch.autograd.profiler.record_function("style_mixing"):
-                num_injection_points = ws.shape[1] // self.G_mapping.num_required_vectors()
+                num_vecs = self.G_mapping.module.num_required_vectors() if isinstance(self.G_mapping, torch.nn.parallel.DistributedDataParallel) else self.G_mapping.num_required_vectors()
+                num_injection_points = ws.shape[1] // num_vecs
                 cutoff = torch.empty([], dtype=torch.int64, device=ws.device).random_(
                     1, num_injection_points
                 )  # * Picks a number, say '5'
@@ -67,7 +68,7 @@ class StyleGAN2Loss(Loss):
                     torch.rand([], device=ws.device) < self.style_mixing_prob,
                     cutoff,
                     torch.full_like(cutoff, num_injection_points),
-                ) * self.G_mapping.num_required_vectors()  # * Randomly chooses to apply the cutoff or not with probability 'style_mixing_prob' (returns a sentinel value)
+                ) * num_vecs  # * Randomly chooses to apply the cutoff or not with probability 'style_mixing_prob' (returns a sentinel value)
                 ws = torch.cat(
                     (
                         ws[:, :cutoff],
@@ -126,6 +127,7 @@ class StyleGAN2Loss(Loss):
                     with torch.autograd.profiler.record_function(
                         "pl_grads"
                     ): #!! , conv2d_gradfix.no_weight_gradients()
+                        #! on DDP: "This module doesn’t work with torch.autograd.grad() (i.e. it will only work if gradients are to be accumulated in .grad attributes of parameters)." Then why does this work?
                         pl_grads = torch.autograd.grad(
                             outputs=[(gen_img * pl_noise).sum()],
                             inputs=[gen_ws],
