@@ -96,9 +96,8 @@ def modulated_conv2d(
     demodulate=True,  # Apply weight demodulation?
     flip_weight=True,  # False = convolution, True = correlation (matches torch.nn.functional.conv2d).
     fused_modconv=True,  # Perform modulation, convolution, and demodulation as a single fused operation?
-):
-    fused_modconv = True #!! fails when combined with gpl
-
+):  
+    fused_modconv = True #!!!
     batch_size = x.shape[0]
     out_channels, in_channels, kh, kw = weight.shape
     misc.assert_shape(weight, [out_channels, in_channels, kh, kw])  # [OIkk]
@@ -136,10 +135,8 @@ def modulated_conv2d(
 
                 assert w.shape[3] == w.shape[4]
                 w = conv(w, s.transpose(1, 2), padding=w.shape[3] - 1)
-                
             else:
                 w = w * s
-
         else:
             w = w * styles.reshape(batch_size, 1, -1, 1, 1)  # [NOIkk]
     if demodulate:
@@ -365,25 +362,32 @@ class MappingNetwork(torch.nn.Module):
 
         return x
 
+    def num_required_vectors(self):
+        return (self.num_ws if self.sample_w_plus else 1) * (
+            self.num_adaconv_vectors if self.sample_for_adaconv else 1
+        )
+
     def forward(self, z, c, **kwargs):
         assert self.num_ws is not None
 
         with torch.autograd.profiler.record_function("broadcast"):
             if not self.sample_w_plus and not self.sample_for_adaconv:
+                assert z.ndim == 2
                 return (
                     self._forward(z, c, **kwargs)
                     .unsqueeze(1)
                     .repeat([1, self.num_ws, 1])
                 )
             else:
-                num_samples = (self.num_ws if self.sample_w_plus else 1) * (
-                    self.num_adaconv_vectors if self.sample_for_adaconv else 1
-                )
-                z = torch.randn(z.shape[0] * num_samples, z.shape[1], device=z.device)
-                return (
-                    self._forward(z, c, **kwargs)
+                num_vectors = self.num_required_vectors()
+                assert z.ndim == 3
+                assert z.shape[1] == num_vectors
+                assert z.shape[2] == self.z_dim
+
+                return ( 
+                    self._forward(z.reshape(z.shape[0] * num_vectors, self.z_dim), c, **kwargs)
                     .unsqueeze(1)
-                    .reshape([-1, num_samples, self.w_dim])
+                    .reshape([z.shape[0], num_vectors, self.w_dim])
                     .repeat([1, self.num_ws, 1])
                 )
 
@@ -417,7 +421,7 @@ class SynthesisLayer(torch.nn.Module):
         self.resolution = resolution
         self.up = up
         self.w_dim = w_dim
-        self.use_noise = not DISABLE_NOISE #!!!
+        self.use_noise = not DISABLE_NOISE
         self.in_channels = in_channels
         self.activation = activation
         self.conv_clamp = conv_clamp
@@ -770,13 +774,14 @@ class SynthesisNetwork(torch.nn.Module):
             )
             ws = ws.to(torch.float32)
             w_idx = 0
+            
             for res in self.block_resolutions:
                 block = getattr(self, f"b{res}")
                 block_ws.append(
                     ws.narrow(1, w_idx * self.w_dim, (block.num_conv + block.num_torgb) * self.w_dim)
                     if self.use_adaconv
                     else ws.narrow(1, w_idx, block.num_conv + block.num_torgb)
-                )
+                ) 
                 w_idx += block.num_conv
 
         x = img = None
@@ -827,6 +832,9 @@ class Generator(torch.nn.Module):
             **mapping_kwargs,
         )
         self.use_adaconv = use_adaconv
+
+    def num_required_vectors(self):
+        return self.mapping.num_required_vectors()
 
     def forward(
         self, z, c, truncation_psi=1, truncation_cutoff=None, **synthesis_kwargs
@@ -1057,7 +1065,7 @@ class DiscriminatorEpilogue(torch.nn.Module):
         )
         self.out = FullyConnectedLayer(in_channels, 1 if cmap_dim == 0 else cmap_dim)
 
-    def forward(self, x, img, cmap, force_fp32=True):
+    def forward(self, x, img, cmap, force_fp32=True): 
         misc.assert_shape(
             x, [None, self.in_channels, self.resolution, self.resolution]
         )  # [NCHW]

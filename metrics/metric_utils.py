@@ -335,7 +335,7 @@ def compute_feature_stats_for_generator(
 
     # JIT.
     if jit:
-        z = torch.zeros([batch_gen, G.z_dim], device=opts.device)
+        z = torch.zeros([batch_gen, G.num_required_vectors(), G.z_dim], device=opts.device).squeeze(1)
         c = torch.zeros([batch_gen, G.c_dim], device=opts.device)
         run_generator = torch.jit.trace(run_generator, [z, c], check_trace=False)
 
@@ -360,12 +360,13 @@ def compute_feature_stats_for_generator(
     while not stats.is_full():
         images = []
         for _i in range(batch_size // batch_gen):
-            z = torch.randn([batch_gen, G.z_dim], device=opts.device)
+            z = torch.randn([batch_gen, G.num_required_vectors(), G.z_dim], device=opts.device).squeeze(1)
             c = [
                 dataset.get_label(np.random.randint(len(dataset)))
                 for _i in range(batch_gen)
             ]
             c = torch.from_numpy(np.stack(c)).pin_memory().to(opts.device)
+            
             images.append(run_generator(z, c))
         images = torch.cat(images)
         if images.shape[1] == 1:
