@@ -1,5 +1,5 @@
 # Sep 10
-- Reduced batch size to 4 for all subsequent experiments
+- Reduced batch size to 8 for all subsequent experiments
 - With a frozen mapper, and without the toRGB layers (resnet architecture + removed injection in the last ToRGB), tried to inject a different # of style vectors
     -> it keeps training up to 16 (so far! trying to get as high as possible). However, some weird "wobly" artifacts appear, and take longer and
 
@@ -27,21 +27,31 @@ THE PROBLEM IS WITH THE GAMMA FACTOR
     *) Batch size 4 (Can we run tests very efficiently?) -> IT WORKS, but doesn't seem much faster than 8 for the same kimg. I will keep 8.
     *) Batch size 32 (Will it still work in our final tests?)
 
-*) Try different gamma factors
-    *) It fails when gamma is 1. Let's just keep 10 for now.
-    -) Can we make the noise work when the gamma factor is OK?
-
-=) Bring back PPL -> It seems to work, but will need to review that it performs well
-    *) Fix problem with the gradient -> It's their custom op. They train WITHOUT fusion, and then add the `conv2d_gradfix.no_weight_gradients()` flag when measuring the PPL? I'm so confused.
-    -) The levels are not similar, because we are averaging
-    -) Train with it
-    -) Double check that the math being done makes sense. Are the values comparable to the old?
+=) Try different gamma factors
+    *) It fails when gamma is 1. Let's just keep 10 for now, as this is what stylegan uses.
+    -) Try gamma 100: it's what they use for church!
 
 =) Bring back style mixing 
     *) Fixed the division to be exactly between groups of 512
     -) Train with it -> It trained without the groups of 512, it will surely work with it as well...
     -) Add a flag to turn it off, and double check that the performance didn't regress because of some other detail
     -) Make it work for wplus sampling, both for adain and adaconv
+
+=) Try baking it as a convolution! 
+    *) Implement it.
+    -) Make it train.
+    -) How to make it worked unbaked?
+    -) What is the cost of 3x3 vs 1x1?
+    -) Try to combine with the noise naïvely. Does it make a difference?
+    -) Work out the math. Why are there transpositions?
+
+=) Bring back PPL -> It seems to work, but will need to review that it performs well
+    *) Fix problem with the gradient -> It's their custom op. They train WITHOUT fusion, and then add the `conv2d_gradfix.no_weight_gradients()` flag when measuring the PPL? I'm so confused.
+    -) PPL is making everything slow?
+    -) The levels are not similar, because we are averaging
+    -) Train with it
+    -) It slows us down, from 17s/kimg to 21s/kimg. What gives?
+    -) Double check that the math being done makes sense. Are the values comparable to the old?
 
 =) Bring back optimizable noise. The issue seems to be, the network ignores the style, and only uses the noise. -> IT FAILS
     *) It seems to get out of the collapse past a certain point! Is the performance still as good?
@@ -50,11 +60,7 @@ THE PROBLEM IS WITH THE GAMMA FACTOR
     -) Try with the whole stylegan2 config
     -) Try to train with adaconv
 
--) Try baking it as a convolution! 
-    -) Train with it separatley
-    -) Train with it in the convolutions
-    -) Try to combine with the noise naïvely. Does it make a difference?
-    -) Work out the math. Why are there transpositions?
+-) Retry freezing the mapper? Make sure it doesn't help.
 
 -) They don't use fused modconv during training! But the result is different from during inference!? WTF is going on?
 
@@ -67,9 +73,9 @@ THE PROBLEM IS WITH THE GAMMA FACTOR
 
 -) Bring back data augmentation.
 
--) Fix the PPL eval script
+-) Fix the PPL eval script.
 
--) Get 16 bit training working again! Provided it is easy
+-) Get 16 bit training working again! Provided it is easy.
 
 -) Measure optimisation speed on 128 
     *) Train 128 for 1M

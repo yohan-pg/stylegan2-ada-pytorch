@@ -18,7 +18,7 @@ import torch.nn.functional as F
 
 
 FREEZE = False
-DISABLE_NOISE = True
+DISABLE_NOISE = False
 USE_ADAIN_IN_TORGB = False
 BAKE_CONVS = False
 
@@ -96,13 +96,13 @@ def modulated_conv2d(
     demodulate=True,  # Apply weight demodulation?
     flip_weight=True,  # False = convolution, True = correlation (matches torch.nn.functional.conv2d).
     fused_modconv=True,  # Perform modulation, convolution, and demodulation as a single fused operation?
-):  
-    fused_modconv = True #!!!
+):
+    fused_modconv = True  #!!!
     batch_size = x.shape[0]
     out_channels, in_channels, kh, kw = weight.shape
     misc.assert_shape(weight, [out_channels, in_channels, kh, kw])  # [OIkk]
     misc.assert_shape(x, [batch_size, in_channels, None, None])  # [NIHW]
-    
+
     if styles.ndim == 2:
         misc.assert_shape(styles, [batch_size, in_channels])  # [NI]
     else:
@@ -121,24 +121,43 @@ def modulated_conv2d(
     # Calculate per-sample weights and demodulation coefficients.
     w = None
     dcoefs = None
-    
+
     if demodulate or fused_modconv:
         w = weight.unsqueeze(0)  # [NOIkk]
 
         if styles.ndim == 3:  # * We are using adaconv
-            s = styles[:, : w.shape[1], : w.shape[2]].unsqueeze(3).unsqueeze(4)
-
+            B = styles.shape[0]
+            I = w.shape[2]
+            O = w.shape[1]
+            Ks = 1
+            Kw = w.shape[3]
+            
             if BAKE_CONVS:
-                raise NotImplementedError # ! need to flip IO because of stylegan, and use conv groups to simulated batched
-                def conv(a, b, padding: int = 0):
-                    return F.conv2d(a, b.flip(3).flip(4), padding=padding)
+                s = styles[:, :I, :I].unsqueeze(3).unsqueeze(4)
+
+                def compose_convs(w1, w2):
+                    def conv(w, x, padding=0):
+                        return F.conv2d(x, w.flip(2).flip(3), padding=padding, groups=B)
+
+                    return conv(
+                        w2, w1.transpose(0, 1), padding=Kw - Ks
+                    ).transpose(0, 1)
 
                 assert w.shape[3] == w.shape[4]
-                w = conv(w, s.transpose(1, 2), padding=w.shape[3] - 1)
+
+                w = compose_convs(
+                    s.reshape(I * B, I, Ks, Ks),
+                    w.repeat(B, 1, 1, 1, 1).reshape(O * B, I, Kw, Kw),
+                )
+                w = w.reshape(B, O, I, Kw, Kw)
             else:
-                w = w * s
+                s = styles[:, :w.shape[1], :w.shape[2]].unsqueeze(3).unsqueeze(4)
+                k = 512
+                w = w * s[:, 0:k, :].repeat(1, max(1, w.shape[1] // k), 1, 1, 1)
         else:
-            w = w * styles.reshape(batch_size, 1, -1, 1, 1)  # [NOIkk]
+            raise NotImplementedError
+            s = styles[:, :w.shape[1], :w.shape[2]].unsqueeze(3).unsqueeze(4)
+            w = w * s  # [NOIkk]
     if demodulate:
         dcoefs = (w.square().sum(dim=[2, 3, 4]) + 1e-8).rsqrt()  # [NO]
     if demodulate and fused_modconv:
@@ -262,7 +281,6 @@ class Conv2dLayer(torch.nn.Module):
 # ----------------------------------------------------------------------------
 
 
-
 @persistence.persistent_class
 class MappingNetwork(torch.nn.Module):
     def __init__(
@@ -321,7 +339,7 @@ class MappingNetwork(torch.nn.Module):
             self.register_buffer("w_avg", torch.zeros([w_dim]))
 
         if FREEZE:
-            freeze(self)  
+            freeze(self)
 
     def _forward(
         self, z, c, truncation_psi=1, truncation_cutoff=None, skip_w_avg_update=False
@@ -384,8 +402,10 @@ class MappingNetwork(torch.nn.Module):
                 assert z.shape[1] == num_vectors
                 assert z.shape[2] == self.z_dim
 
-                return ( 
-                    self._forward(z.reshape(z.shape[0] * num_vectors, self.z_dim), c, **kwargs)
+                return (
+                    self._forward(
+                        z.reshape(z.shape[0] * num_vectors, self.z_dim), c, **kwargs
+                    )
                     .unsqueeze(1)
                     .reshape([z.shape[0], num_vectors, self.w_dim])
                     .repeat([1, self.num_ws, 1])
@@ -647,7 +667,7 @@ class SynthesisBlock(torch.nn.Module):
             iter(ws.unbind(dim=1))
             if not self.use_adaconv
             else iter(ws.chunk(self.num_conv + self.num_torgb, dim=1))
-        ) #* Here, we get shapes like [8, 512] (ndim=2) for adain but [8, 512, 512] for adaconv (ndim=3)
+        )  # * Here, we get shapes like [8, 512] (ndim=2) for adain but [8, 512, 512] for adaconv (ndim=3)
 
         dtype = torch.float16 if self.use_fp16 and not force_fp32 else torch.float32
         memory_format = (
@@ -774,14 +794,18 @@ class SynthesisNetwork(torch.nn.Module):
             )
             ws = ws.to(torch.float32)
             w_idx = 0
-            
+
             for res in self.block_resolutions:
                 block = getattr(self, f"b{res}")
                 block_ws.append(
-                    ws.narrow(1, w_idx * self.w_dim, (block.num_conv + block.num_torgb) * self.w_dim)
+                    ws.narrow(
+                        1,
+                        w_idx * self.w_dim,
+                        (block.num_conv + block.num_torgb) * self.w_dim,
+                    )
                     if self.use_adaconv
                     else ws.narrow(1, w_idx, block.num_conv + block.num_torgb)
-                ) 
+                )
                 w_idx += block.num_conv
 
         x = img = None
@@ -1065,7 +1089,7 @@ class DiscriminatorEpilogue(torch.nn.Module):
         )
         self.out = FullyConnectedLayer(in_channels, 1 if cmap_dim == 0 else cmap_dim)
 
-    def forward(self, x, img, cmap, force_fp32=True): 
+    def forward(self, x, img, cmap, force_fp32=True):
         misc.assert_shape(
             x, [None, self.in_channels, self.resolution, self.resolution]
         )  # [NCHW]

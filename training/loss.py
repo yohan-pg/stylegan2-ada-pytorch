@@ -114,7 +114,8 @@ class StyleGAN2Loss(Loss):
                 with torch.autograd.profiler.record_function("Gmain_backward"):
                     loss_Gmain.mean().mul(gain).backward()
 
-            # # Gpl: Apply path length regularization.
+            # !!! performance regression?
+            # Gpl: Apply path length regularization.
             if do_Gpl:
                 with torch.autograd.profiler.record_function("Gpl_forward"):
                     batch_size = gen_z.shape[0] // self.pl_batch_shrink
@@ -126,7 +127,7 @@ class StyleGAN2Loss(Loss):
                     )
                     with torch.autograd.profiler.record_function(
                         "pl_grads"
-                    ): #!! , conv2d_gradfix.no_weight_gradients()
+                    ): #!!,conv2d_gradfix.no_weight_gradients()
                         #! on DDP: "This module doesn’t work with torch.autograd.grad() (i.e. it will only work if gradients are to be accumulated in .grad attributes of parameters)." Then why does this work?
                         pl_grads = torch.autograd.grad(
                             outputs=[(gen_img * pl_noise).sum()],
