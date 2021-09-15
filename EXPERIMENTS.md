@@ -48,8 +48,8 @@ THE PROBLEM IS WITH THE GAMMA FACTOR
 =) Bring back PPL -> It seems to work, but will need to review that it performs well
     *) Fix problem with the gradient -> It's their custom op. They train WITHOUT fusion, and then add the `conv2d_gradfix.no_weight_gradients()` flag when measuring the PPL? I'm so confused.
     -) PPL is making everything slow?
-    -) The levels are not similar, because we are averaging
-    -) Train with it
+    -) The levels are not similar, because we are averaging.
+    -) Train with it.
     -) It slows us down, from 17s/kimg to 21s/kimg. What gives?
     -) Double check that the math being done makes sense. Are the values comparable to the old?
 
@@ -59,6 +59,7 @@ THE PROBLEM IS WITH THE GAMMA FACTOR
         -) Compare without the style mixing. Was it the mixing that solved everything?
     -) Try with the whole stylegan2 config
     -) Try to train with adaconv
+    *) Gamma 100 doesn't save us
 
 -) Retry freezing the mapper? Make sure it doesn't help.
 
@@ -68,6 +69,7 @@ THE PROBLEM IS WITH THE GAMMA FACTOR
     -) Recall seems low. What gives?
         -) Maybe it's the perceptual distance that is falling appart on 32x32. But then, why doesn't it suck with the baseline?
             *) Try on a higher resolution. 
+            *) We get a decent gamma score when the style collapses and all the training happens in the noise (0.17 after just 200k imgs). Maybe we just need the noise?
             -) Try with MSE in the eval code instead of perceptual?
         -) What is the impact of the gamma factor on the recall, when using our baseline?
 

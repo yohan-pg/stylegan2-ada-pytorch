@@ -1,3 +1,4 @@
+export DNNLIB_CACHE_DIR="cache"
 export TERMINFO=/usr/share/terminfo
 export CXX=g++
 # * Note that on tch, the device # appears reversed (titan v is 1, titant rtx is 0)
