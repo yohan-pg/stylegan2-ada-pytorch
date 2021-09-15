@@ -197,7 +197,7 @@ def training_loop(
 
     # Print network summary tables.
     if rank == 0:
-        z = torch.empty([batch_gpu, G.z_dim], device=device)
+        z = torch.empty([batch_gpu, G.num_required_vectors(), G.z_dim], device=device).squeeze(1)
         c = torch.empty([batch_gpu, G.c_dim], device=device)
         img = misc.print_module_summary(G, [z, c])
         misc.print_module_summary(D, [img, c])
@@ -296,17 +296,31 @@ def training_loop(
             drange=[0, 255],
             grid_size=grid_size,
         )
-        grid_z = torch.randn([labels.shape[0], G.z_dim], device=device).split(batch_gpu)
-        grid_c = torch.from_numpy(labels).to(device).split(batch_gpu)
-        images = torch.cat(
-            [G_ema(z=z, c=c, noise_mode="const").cpu() for z, c in zip(grid_z, grid_c)]
-        ).numpy()
-        save_image_grid(
-            images,
-            os.path.join(run_dir, "fakes_init.png"),
-            drange=[-1, 1],
-            grid_size=grid_size,
-        )
+        
+        with torch.no_grad():
+            grid_z = torch.randn([labels.shape[0], G.num_required_vectors(), G.z_dim], device=device).squeeze(1).split(batch_gpu)
+            grid_c = torch.from_numpy(labels).to(device).split(batch_gpu)
+            
+            images = torch.cat(
+                [G_ema(z=z, c=c, noise_mode="const").cpu() for z, c in zip(grid_z, grid_c)] 
+            ).numpy()
+            save_image_grid(
+                images,
+                os.path.join(run_dir, "fakes_init.png"),
+                drange=[-1, 1],
+                grid_size=grid_size,
+            )
+
+            images = torch.cat(
+                [G_ema(z=z, c=c, noise_mode="random").cpu() for z, c in zip(grid_z, grid_c)] 
+            ).numpy()
+            save_image_grid(
+                images,
+                os.path.join(run_dir, "random_fakes_init.png"),
+                drange=[-1, 1],
+                grid_size=grid_size,
+            )
+        
 
     # Initialize logs.
     if rank == 0:
@@ -345,7 +359,7 @@ def training_loop(
                 phase_real_img.to(device).to(torch.float32) / 127.5 - 1
             ).split(batch_gpu)
             phase_real_c = phase_real_c.to(device).split(batch_gpu)
-            all_gen_z = torch.randn([len(phases) * batch_size, G.z_dim], device=device)
+            all_gen_z = torch.randn([len(phases) * batch_size, G.num_required_vectors(), G.z_dim], device=device).squeeze(1)
             all_gen_z = [
                 phase_gen_z.split(batch_gpu)
                 for phase_gen_z in all_gen_z.split(batch_size)
@@ -486,18 +500,32 @@ def training_loop(
             and (image_snapshot_ticks is not None)
             and (done or cur_tick % image_snapshot_ticks == 0)
         ):
-            images = torch.cat(
-                [
-                    G_ema(z=z, c=c, noise_mode="const").cpu()
-                    for z, c in zip(grid_z, grid_c)
-                ]
-            ).numpy()
-            save_image_grid(
-                images,
-                os.path.join(run_dir, f"fakes{cur_nimg//1000:06d}.png"),
-                drange=[-1, 1],
-                grid_size=grid_size,
-            )
+            with torch.no_grad():
+                images = torch.cat(
+                    [
+                        G_ema(z=z, c=c, noise_mode="const").cpu()
+                        for z, c in zip(grid_z, grid_c)
+                    ]
+                ).numpy()
+                save_image_grid(
+                    images,
+                    os.path.join(run_dir, f"fakes{cur_nimg//1000:06d}.png"),
+                    drange=[-1, 1],
+                    grid_size=grid_size,
+                )
+
+                images = torch.cat(
+                    [
+                        G_ema(z=z, c=c, noise_mode="random").cpu()
+                        for z, c in zip(grid_z, grid_c)
+                    ]
+                ).numpy()
+                save_image_grid(
+                    images,
+                    os.path.join(run_dir, f"random_fakes{cur_nimg//1000:06d}.png"),
+                    drange=[-1, 1],
+                    grid_size=grid_size,
+                )
 
         # Save network snapshot.
         snapshot_pkl = None

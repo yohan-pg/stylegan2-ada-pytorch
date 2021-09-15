@@ -1,6 +1,10 @@
-# * Note that on tch, the device # appears reversed (titan v is 1, titant rtx is 0)
 
-export CXX=g++
-export CUDA_VISIBLE_DEVICES=0,1
-
-python train.py --outdir="./training-runs/$1" --kimg 5000 --data=./datasets/afhq64cat.zip --metrics none --gpus=2 --sample_w_plus True
+python train.py \
+    --kimg 5000 \
+    --data=./datasets/afhq32cat.zip \
+    --batch 8 --metrics=fid50k,pr50k3 \
+    --snap 50 \
+    --gamma 10 \
+    --gpus=2 \
+    --outdir="./training-runs/$1" \
+    "${@:2}"

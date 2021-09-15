@@ -277,7 +277,7 @@ def setup_training_loop_kwargs(
         spec.fmaps = 1 if res >= 512 else 0.5
         spec.lrate = 0.002 if res >= 1024 else 0.0025
         spec.gamma = 0.0002 * (res ** 2) / spec.mb  # heuristic formula
-        spec.ema = spec.mb * 10 / 32
+        spec.ema = spec.mb * 10 / 32 #! dependency on minibatch
 
     args.G_kwargs = dnnlib.EasyDict(
         class_name="training.networks.Generator",
@@ -306,7 +306,7 @@ def setup_training_loop_kwargs(
     ) = 4  # enable mixed-precision training
     args.G_kwargs.synthesis_kwargs.conv_clamp = (
         args.D_kwargs.conv_clamp
-    ) = 256  # clamp activations to avoid float16 overflow
+    ) = None  # clamp activations to avoid float16 overflow #!!!was 256
     args.D_kwargs.epilogue_kwargs.mbstd_group_size = spec.mbstd
 
     args.G_opt_kwargs = dnnlib.EasyDict(

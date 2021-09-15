@@ -1,5 +1,5 @@
 - try interpolation and inversion without PPL
-- understand and measure recall
+- prepare optimization speed measuring code
 - try different # of style vectors and save images for jeff
 - review grads. how in the **** is the gradient on the mapper similar, but not on the style?
 - work out convolution baking
@@ -7,7 +7,5 @@
 - how is their perceptual loss so good?
 - try disabling their new ada stuff. Is it saved in the image outputs?
 - does stylegan2 still pass minibatch std to the discr?
-- review configs 
-
-- why did style mixing cause a memory leak? This may be indicative of an underlying problem... -> I think it's just because of the reshaping, which confuses the version counts
+- review their configs 
 - understand how the minibatches are split on the GPU
