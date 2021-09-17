@@ -17,6 +17,7 @@ from torch_utils.ops import fma
 import torch.nn.functional as F
 import math
 
+
 FREEZE = False
 DISABLE_NOISE = False
 USE_ADAIN_IN_TORGB = False
@@ -131,17 +132,14 @@ def modulated_conv2d(
             O = w.shape[1]
             Ks = 1
             Kw = w.shape[3]
-            
+
             if BAKE_CONVS:
                 s = styles[:, :I, :I].unsqueeze(3).unsqueeze(4)
 
                 def compose_convs(w1, w2):
                     def conv(w, x, padding=0):
                         return F.conv2d(x, w.flip(2).flip(3), padding=padding, groups=B)
-
-                    return conv(
-                        w2, w1.transpose(0, 1), padding=Kw - Ks
-                    ).transpose(0, 1)
+                    return conv(w2, w1.transpose(0, 1), padding=Kw - Ks).transpose(0, 1)
 
                 assert w.shape[3] == w.shape[4]
 
@@ -151,11 +149,11 @@ def modulated_conv2d(
                 )
                 w = w.reshape(B, O, I, Kw, Kw)
             else:
-                s = styles[:, :w.shape[1], :w.shape[2]].unsqueeze(3).unsqueeze(4)
+                s = styles[:, : w.shape[1], : w.shape[2]].unsqueeze(3).unsqueeze(4)
                 k = 512
                 w = w * s[:, 0:k, :].repeat(1, max(1, w.shape[1] // k), 1, 1, 1)
         else:
-            w = w * styles.reshape(batch_size, 1, -1, 1, 1) # [NOIkk]
+            w = w * styles.reshape(batch_size, 1, -1, 1, 1)  # [NOIkk]
     if demodulate:
         dcoefs = (w.square().sum(dim=[2, 3, 4]) + 1e-8).rsqrt()  # [NO]
     if demodulate and fused_modconv:
@@ -460,7 +458,6 @@ class SynthesisLayer(torch.nn.Module):
         if self.use_noise:
             self.register_buffer("noise_const", torch.randn([resolution, resolution]))
             self.noise_strength = torch.nn.Parameter(torch.zeros([]))
-            self.noise_gain = 0.01 if self.use_adaconv else 1
         self.bias = torch.nn.Parameter(torch.zeros([out_channels]))
 
     def forward(self, x, w, noise_mode="random", fused_modconv=True, gain=1):
@@ -474,6 +471,7 @@ class SynthesisLayer(torch.nn.Module):
         else:
             styles = self.affine(w)
 
+
         noise = None
         if self.use_noise and noise_mode == "random":
             noise = (
@@ -483,7 +481,7 @@ class SynthesisLayer(torch.nn.Module):
                 * self.noise_strength
             )
         if self.use_noise and noise_mode == "const":
-            noise = self.noise_gain * self.noise_const * self.noise_strength
+            noise = self.noise_const * self.noise_strength
 
         flip_weight = self.up == 1  # slightly faster
         x = modulated_conv2d(
@@ -550,6 +548,7 @@ class ToRGBLayer(torch.nn.Module):
             )
         else:
             styles = self.affine(w)
+
 
         styles = styles * self.weight_gain
         x = modulated_conv2d(
@@ -655,7 +654,7 @@ class SynthesisBlock(torch.nn.Module):
                 channels_last=self.channels_last,
             )
 
-    def forward(self, x, img, ws, force_fp32=True, fused_modconv=None, **layer_kwargs):
+    def forward(self, x, img, ws, force_fp32=False, fused_modconv=None, **layer_kwargs):
         if self.use_adaconv:
             misc.assert_shape(
                 ws, [None, (self.num_conv + self.num_torgb) * self.w_dim, self.w_dim]
@@ -963,7 +962,7 @@ class DiscriminatorBlock(torch.nn.Module):
                 channels_last=self.channels_last,
             )
 
-    def forward(self, x, img, force_fp32=True):
+    def forward(self, x, img, force_fp32=False):
         dtype = torch.float16 if self.use_fp16 and not force_fp32 else torch.float32
         memory_format = (
             torch.channels_last
@@ -1088,7 +1087,7 @@ class DiscriminatorEpilogue(torch.nn.Module):
         )
         self.out = FullyConnectedLayer(in_channels, 1 if cmap_dim == 0 else cmap_dim)
 
-    def forward(self, x, img, cmap, force_fp32=True):
+    def forward(self, x, img, cmap, force_fp32=False):
         misc.assert_shape(
             x, [None, self.in_channels, self.resolution, self.resolution]
         )  # [NCHW]

@@ -86,7 +86,7 @@ def project(
     url = "https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/metrics/vgg16.pt"
     with dnnlib.util.open_url(url) as f:
         vgg16 = torch.jit.load(f).eval().to(device)
-
+    
     # Features for target image.
     target_images_large = target.unsqueeze(0).to(device).to(torch.float32)
     if target_images_large.shape[2] > 256:
