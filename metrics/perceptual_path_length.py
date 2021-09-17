@@ -53,7 +53,7 @@ class PPLSampler(torch.nn.Module):
         t = torch.rand([c.shape[0]], device=c.device) * (
             1 if self.sampling == "full" else 0
         )
-        z0, z1 = torch.randn([c.shape[0] * 2, self.G.z_dim], device=c.device).chunk(2)
+        z0, z1 = torch.randn([c.shape[0] * 2, self.G.num_required_vectors(), self.G.z_dim], device=c.device).squeeze(1).chunk(2)
 
         # Interpolate in W or Z.
         if self.space == "w":
@@ -61,6 +61,7 @@ class PPLSampler(torch.nn.Module):
             wt0 = w0.lerp(w1, t.unsqueeze(1).unsqueeze(2))
             wt1 = w0.lerp(w1, t.unsqueeze(1).unsqueeze(2) + self.epsilon)
         else:  # space == 'z'
+            raise NotImplementedError
             zt0 = slerp(z0, z1, t.unsqueeze(1))
             zt1 = slerp(z0, z1, t.unsqueeze(1) + self.epsilon)
             wt0, wt1 = self.G.mapping(
