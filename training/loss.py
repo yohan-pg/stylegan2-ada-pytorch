@@ -133,8 +133,9 @@ class StyleGAN2Loss(Loss):
                             inputs=[gen_ws],
                             create_graph=True,
                             only_inputs=True,
-                        )[0] # ? (* self.G_mapping.num_required_vectors())
-                    pl_lengths = pl_grads.square().sum(2).mean(1).sqrt() * math.sqrt(self.G_mapping.num_required_vectors())
+                        )[0]
+                    M = self.G_mapping.module if isinstance(self.G_mapping, torch.nn.parallel.DistributedDataParallel) else self.G_mapping
+                    pl_lengths = pl_grads.square().sum(2).mean(1).sqrt() * math.sqrt(M.num_required_vectors())
                     pl_mean = self.pl_mean.lerp(pl_lengths.mean(), self.pl_decay)
                     self.pl_mean.copy_(pl_mean.detach())
                     pl_penalty = (pl_lengths - pl_mean).square()

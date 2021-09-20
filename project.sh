@@ -1,5 +1,7 @@
 set -e 
 
+export CUDA_VISIBLE_DEVICES=1
+
 case $1 in 
     church*) 
         python projector.py --outdir=out/church1 --target=datasets/chruch_samples/church1.png \
@@ -10,9 +12,8 @@ case $1 in
     ;;
     cars*) 
         python projector.py --outdir=out/car6-f --target=datasets/samples/cars/car6.png \
-            --network=./pretrained/stylegan2-car-config-f.pkl # ! should be c
+            --network=./pretrained/stylegan2-car-config-f.pkl
             
-
         python projector.py --outdir=out/car6-d --target=datasets/samples/cars/car6.png \
             --network=./pretrained/stylegan2-car-config-d.pkl
 
@@ -50,5 +51,25 @@ case $1 in
         python projector.py --outdir=out/real2 --target=./datasets/ffhq_samples/00018.png \
             --network=pretrained/stylegan2-car-config-f.pkl
     ;;
-    *) echo "No such dataset."
+    cats*)
+        python projector.py --outdir=out/cat-1-adaconv --target=./datasets/samples/cats/00000/img00000003.png \
+            --network=pretrained/alpha-adaconv-002600.pkl "${@:2}"
+
+        python projector.py --outdir=out/cat-2-adaconv --target=./datasets/samples/cats/00000/img00000013.png \
+            --network=pretrained/alpha-adaconv-002600.pkl "${@:2}"
+
+        python3 interpolator.py  pretrained/alpha-adaconv-002600.pkl 'out/cat-1-adaconv' 'out/cat-2-adaconv'
+        
+        python projector.py --outdir=out/cat-1-adain --target=./datasets/samples/cats/00000/img00000003.png \
+            --network=pretrained/alpha-adain-002600.pkl "${@:2}"
+
+        python projector.py --outdir=out/cat-2-adain --target=./datasets/samples/cats/00000/img00000013.png \
+            --network=pretrained/alpha-adain-002600.pkl "${@:2}"
+
+        python3 interpolator.py  pretrained/alpha-adain-002600.pkl 'out/cat-1-adain' 'out/cat-2-adain'
+    ;;
+    *)
+    
+    
+     echo "No such dataset."
 esac

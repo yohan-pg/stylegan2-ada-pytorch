@@ -77,9 +77,17 @@ THE PROBLEM IS WITH THE GAMMA FACTOR
     -) Train a baseline for 1M
     -) Update the optim script and compare
 
+# Real Conv
+- With the SG2 normalization applies to the style matrix, it does not seem to train. noise/no-noise, plus id/no plus id (centered at 0), gamma 10/100.
+- Without it, it does seem to train. So far I tried without plus id, just centered at 0. With plus ID it seems to work negligably better. Mul by sqrt(512) (before the +I) also works, but appears to slow down convergence a bit... Div by sqrt(512) performs a bit better than both. 
+- Next up, try with the noise again, then with baking (without plus ID, different factors, etc.). 
+
 # Low prio
 -) Once finished, abalate every change (noise, ppl, gamma, mixing, etc.) to understand their effect better
 -) Hyperparameter search on the ideal gamma factor, but only once everything else is in place. 
 -) Double check the SG2 configuration (which will be our final config)
 -) Can we train on W+ with our thing?
 -) Double check quality with/without injection in ToRGB 
+
+
+
