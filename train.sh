@@ -1,8 +1,9 @@
 
 python train.py \
-    --kimg 5000 \
-    --data=./datasets/afhq32cat.zip \
-    --batch 8 --metrics=fid50k,pr50k3 \
+    --kimg 25000 \
+    --data=./datasets/afhq128cat.zip \
+    --cfg stylegan2 \
+    --metrics=fid50k,pr50k3 \
     --snap 50 \
     --gamma 10 \
     --gpus=2 \

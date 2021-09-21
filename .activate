@@ -1,10 +1,7 @@
+export DNNLIB_CACHE_DIR="cache"
 export TERMINFO=/usr/share/terminfo
-export CXX=g++
 # * Note that on tch, the device # appears reversed (titan v is 1, titant rtx is 0)
-export CUDA_VISIBLE_DEVICES=0,1
-
+# module load python
+export CUDA_VISIBLE_DEVICES=0,1,2,3
+module load cuda
 source stylegan2/bin/activate
-
-function rj {
-    command setsid $1 >/dev/null
-}
