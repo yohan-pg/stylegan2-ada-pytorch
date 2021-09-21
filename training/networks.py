@@ -18,9 +18,7 @@ import torch.nn.functional as F
 import math
 
 
-FREEZE = False
-DISABLE_NOISE = False
-USE_ADAIN_IN_TORGB = False
+DISABLE_NOISE = True #!!!
 BAKE_CONVS = False
 
 
@@ -98,7 +96,7 @@ def modulated_conv2d(
     flip_weight=True,  # False = convolution, True = correlation (matches torch.nn.functional.conv2d).
     fused_modconv=True,  # Perform modulation, convolution, and demodulation as a single fused operation?
 ):
-    fused_modconv = True  #!!!
+    fused_modconv = True #!!!
     batch_size = x.shape[0]
     out_channels, in_channels, kh, kw = weight.shape
     misc.assert_shape(weight, [out_channels, in_channels, kh, kw])  # [OIkk]
@@ -150,7 +148,7 @@ def modulated_conv2d(
                 w = w.reshape(B, O, I, Kw, Kw)
             else:
                 s = styles[:, : w.shape[1], : w.shape[2]].unsqueeze(3).unsqueeze(4)
-                k = 512
+                k = 64 #!!!!!!!!
                 w = w * s[:, 0:k, :].repeat(1, max(1, w.shape[1] // k), 1, 1, 1)
         else:
             w = w * styles.reshape(batch_size, 1, -1, 1, 1)  # [NOIkk]
@@ -161,7 +159,14 @@ def modulated_conv2d(
 
     # Execute by scaling the activations before and after the convolution.
     if not fused_modconv:
-        x = x * styles.to(x.dtype).reshape(batch_size, -1, 1, 1)
+        raise NotImplementedError
+        if styles.ndim == 3:
+            S = (styles[:, :x.shape[1], :x.shape[1]] - 1) / math.sqrt(512) 
+            # + torch.eye(x.shape[1]).unsqueeze(0).to(styles.device) / math.sqrt(2)
+            # S = S * (S.square().sum(dim=[2], keepdim=True) + 1e-8).rsqrt() #!! no normalization
+            x = (S @ x.reshape(-1, x.shape[1], x.shape[2] * x.shape[3])).reshape(x.shape)
+        else:
+            x = x * styles.to(x.dtype).reshape(batch_size, -1, 1, 1)
         x = conv2d_resample.conv2d_resample(
             x=x,
             w=weight.to(x.dtype),
@@ -334,9 +339,6 @@ class MappingNetwork(torch.nn.Module):
         if num_ws is not None and w_avg_beta is not None:
             self.register_buffer("w_avg", torch.zeros([w_dim]))
 
-        if FREEZE:
-            freeze(self)
-
     def _forward(
         self, z, c, truncation_psi=1, truncation_cutoff=None, skip_w_avg_update=False
     ):
@@ -402,7 +404,6 @@ class MappingNetwork(torch.nn.Module):
                     self._forward(
                         z.reshape(z.shape[0] * num_vectors, self.z_dim), c, **kwargs
                     )
-                    .unsqueeze(1)
                     .reshape([z.shape[0], num_vectors, self.w_dim])
                     .repeat([1, self.num_ws, 1])
                 )
@@ -464,13 +465,13 @@ class SynthesisLayer(torch.nn.Module):
         assert noise_mode in ["random", "const", "none"]
         in_resolution = self.resolution // self.up
         misc.assert_shape(x, [None, self.weight.shape[1], in_resolution, in_resolution])
+
         if self.use_adaconv:
             styles = self.affine(w.reshape(-1, self.w_dim)).reshape(
                 w.shape[0], w.shape[1], self.in_channels
             )
         else:
             styles = self.affine(w)
-
 
         noise = None
         if self.use_noise and noise_mode == "random":
@@ -549,8 +550,7 @@ class ToRGBLayer(torch.nn.Module):
         else:
             styles = self.affine(w)
 
-
-        styles = styles * self.weight_gain
+        styles = styles * self.weight_gain #!!!breaks conv
         x = modulated_conv2d(
             x=x,
             weight=self.weight,
@@ -795,12 +795,13 @@ class SynthesisNetwork(torch.nn.Module):
 
             for res in self.block_resolutions:
                 block = getattr(self, f"b{res}")
+                breakpoint()
                 block_ws.append(
                     ws.narrow(
                         1,
                         w_idx * self.w_dim,
                         (block.num_conv + block.num_torgb) * self.w_dim,
-                    )
+                    ) #!!! double check
                     if self.use_adaconv
                     else ws.narrow(1, w_idx, block.num_conv + block.num_torgb)
                 )

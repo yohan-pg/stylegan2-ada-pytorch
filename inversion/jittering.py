@@ -1,12 +1,15 @@
 from .prelude import *
 
+class OptimizationConstraint:
+    pass
 
-class StyleJittering(ToStyles):
+
+class StyleJittering(OptimizationConstraint):
     def __init__(self, variable, initial_noise_factor, noise_ramp_lenght):
         self.variable = variable
 
     def update(self, t):
-        w = self.variable.variable_to_style()
+        w = self.variable.variable_to_style() # todo is this really applied after style mixing?
         w_noise_scale = (
             self.w_std
             * self.initial_noise_factor
@@ -17,7 +20,10 @@ class StyleJittering(ToStyles):
         return w + w_noise # !!
 
 
-class NoiseJittering:
+class NoiseJittering(OptimizationConstraint):
+    # initial_noise_factor=0.05,
+    # noise_ramp_length=0.75,
+    # regularize_noise_weight=1e5,
     # todo this must be in optimizer
     # + (list(noise_bufs.values()) if optimize_noise else []),
 

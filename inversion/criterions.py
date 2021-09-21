@@ -1,38 +1,34 @@
 from .prelude import *
 
+import functools
+
 
 class InversionCriterion(nn.Module):
-    pass
+    pass # todo this is just the interface of torhc loss functions
 
 
 class VGGCriterion(InversionCriterion):
-    def __init__(self, target):
-        # Load VGG16 feature detector.
-        url = "https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/metrics/vgg16.pt"
-        with dnnlib.util.open_url(url) as f:
+    def __init__(self, target: ImageTensor):
+        super().__init__()
+
+        self.target = target.unsqueeze(0).cuda().to(torch.float32)
+
+        with dnnlib.util.open_url(
+            "https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/metrics/vgg16.pt"
+        ) as f:
             self.vgg16 = torch.jit.load(f).eval().cuda()
 
-        # Features for target image.
-        target = target.unsqueeze(0).cuda().to(torch.float32)
-        if target.shape[2] > 256:
-            target = F.interpolate(target, size=(256, 256), mode="area")
+    # @functools.lru_cache(2) # todo
+    def extract_features(self, x):
+        "Expects an image with values between 0.0 and 1.0"
+        if x.shape[2] > 256:
+            x = F.interpolate(x, size=(256, 256), mode="area", align_corners=False)
 
-        self.target_features = self.vgg16(
-            target.clone(), resize_images=False, return_lpips=True
+        return self.vgg16(
+            x.clone() * 255, resize_images=False, return_lpips=True
         )
 
-    def forward(self, synth_images):
-        synth_images = (synth_images + 1) * (255 / 2)
-
-        if synth_images.shape[2] > 256:
-            synth_images = F.interpolate(synth_images, size=(256, 256), mode="area")
-
-        synth_features = self.vgg16(
-            synth_images, resize_images=False, return_lpips=True
-        )
-        return (self.target_features - synth_features).square().sum()  #!? sum not mean?
-
-
-class L1Criterion(InversionCriterion):
-    def __call__(self, synth_images, target_images):
-        return torch.nn.L1Loss()((synth_images + 1) / 2, target_images / 255.0)
+    def forward(self, pred: ImageTensor, target: ImageTensor):
+        return (
+            (self.extract_features(pred) - self.extract_features(target)).square().sum()
+        )  #!? sum not mean?

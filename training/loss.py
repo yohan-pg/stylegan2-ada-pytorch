@@ -120,7 +120,7 @@ class StyleGAN2Loss(Loss):
                 with torch.autograd.profiler.record_function("Gpl_forward"):
                     batch_size = gen_z.shape[0] // self.pl_batch_shrink
                     gen_img, gen_ws = self.run_G(
-                        gen_z[:batch_size], gen_c[:batch_size], sync=sync
+                        gen_z[:batch_size].requires_grad_(True), gen_c[:batch_size], sync=sync
                     )
                     pl_noise = torch.randn_like(gen_img) / np.sqrt(
                         gen_img.shape[2] * gen_img.shape[3]

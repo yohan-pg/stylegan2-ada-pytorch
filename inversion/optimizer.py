@@ -1,12 +1,6 @@
 from .prelude import *
 
 
-# initial_learning_rate=0.1,
-# initial_noise_factor=0.05,
-# noise_ramp_length=0.75,
-# regularize_noise_weight=1e5,
-
-
 @dataclass(eq=False)
 class RampedDownAdam:
     initial_learning_rate: float = 0.1

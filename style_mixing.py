@@ -94,8 +94,10 @@ def generate_style_mix(
     python style_mixing.py --outdir=out --rows=85,100,75,458,1500 --cols=55,821,1789,293 \\
         --network=https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/metfaces.pkl
     """
+    breakpoint()
     print('Loading networks from "%s"...' % network_pkl)
     device = torch.device("cuda")
+
     with dnnlib.util.open_url(network_pkl) as f:
         G = legacy.load_network_pkl(f)["G_ema"].to(device)  # type: ignore
 

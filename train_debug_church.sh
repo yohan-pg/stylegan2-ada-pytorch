@@ -3,5 +3,5 @@
 
 export CUDA_VISIBLE_DEVICES=1
 
-bash train.sh debug --gpus=1 --metrics none "${@}"
+bash train_church.sh debug --gpus=1 --metrics none "${@}"
 

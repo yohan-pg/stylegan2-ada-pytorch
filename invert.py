@@ -10,113 +10,78 @@
 
 from inversion import *
 
+# todo why is L1 so bad??
+# todo try random noise
+# todo measure PPL
+# todo try joint optimization
+# todo try style mixing
+# todo bring back jittering
 
-def open_network_pkl(pkl_path: str):
-    print(f"Loading networks from {pkl_path}...")
+# ? try training with ppl and without style mixing?
+# ? try adaconv 3x3
+# ? try training without a mapper
+# ? try training without style mixing
+# ? try training without noise at all
+# ? try training on 256 so the VGG loss looks right
+# ? add skip_w_avg_update to mapper
 
-    with dnnlib.util.open_url(pkl_path) as fp:
-        return legacy.load_network_pkl(fp)["G_ema"].requires_grad_(False).cuda()  # type: ignore
+#!!!using SGD
 
+METHOD = "adain"
+G_PATH = f"pretrained/alpha-{METHOD}-002600.pkl"
+OUT_DIR = f"out/{METHOD}-cat"
+NUM_STEPS = 1000
+SEQUENTIAL = False
+VARIABLE_TYPE = WPlusVariableInitAtMean
+CRITERION_TYPE = VGGCriterion
+SNAPSHOT_FREQ = 10
+# OPTIMIZER_CTOR = lambda params: torch.optim.Adam(
+#     params, lr=0.01, betas=(0.0, 0.0)
+# )
+OPTIMIZER_CTOR = lambda params: torch.optim.Adam(
+    params, lr=0.01, betas=(0.9, 0.999)
+)
+# OPTIMIZER_CTOR = lambda params: torch.optim.Adam(
+#     params, lr=1.0, momentum=0.0
+# )
 
-def open_target(G, path: str):
-    target_pil = PIL.Image.open(path).convert("RGB")
-    w, h = target_pil.size
-    s = min(w, h)
-    target_pil = target_pil.crop(
-        ((w - s) // 2, (h - s) // 2, (w + s) // 2, (h + s) // 2)
-    )
-    target_pil = target_pil.resize(
-        (G.img_resolution, G.img_resolution), PIL.Image.LANCZOS
-    )
-    target_uint8 = np.array(target_pil, dtype=np.uint8)
-    return torch.tensor(target_uint8.transpose([2, 0, 1])).cuda()
-
-
-def save_video(G, target_uint8, outdir: str, projected_w_steps: list):
-    video = imageio.get_writer(
-        f"{outdir}/proj.mp4", mode="I", fps=10, codec="libx264", bitrate="16M"
-    )
-    print(f'Saving optimization progress video "{outdir}/proj.mp4"')
-    for projected_w in projected_w_steps:
-        synth_image = G.synthesis(projected_w.unsqueeze(0), noise_mode="const")
-        synth_image = (synth_image + 1) * (255 / 2)
-        synth_image = (
-            synth_image.permute(0, 2, 3, 1)
-            .clamp(0, 255)
-            .to(torch.uint8)[0]
-            .cpu()
-            .numpy()
-        )
-        video.append_data(np.concatenate([target_uint8, synth_image], axis=1))
-    video.close()
-
-
-def save_frame(G, outdir: str, target_uint8: list, projected_w_steps: list):
-    # Save final projected frame and W vector.
-    target_uint8.save(f"{outdir}/target.png")  #!! was target_pil
-    projected_w = projected_w_steps[-1]
-    synth_image = G.synthesis(projected_w.unsqueeze(0), noise_mode="const")
-    synth_image = (synth_image + 1) * (255 / 2)
-    synth_image = (
-        synth_image.permute(0, 2, 3, 1).clamp(0, 255).to(torch.uint8)[0].cpu().numpy()
-    )
-    PIL.Image.fromarray(synth_image, "RGB").save(f"{outdir}/proj.png")
-    np.savez(f"{outdir}/projected_w.npz", w=projected_w.unsqueeze(0).cpu().numpy())
-    return outdir
-
-
-def invert(
-    G,
-    target_path: str,
-    outdir: str,
-    num_steps: int = 1000,
-    save_video: bool = False,
-    seed: int = 0,
-):
-    os.makedirs(outdir, exist_ok=True)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-
-    target = open_target(G, target_path)
-    start_time = perf_counter()
-
-    # w_out = torch.zeros(
-    #     [num_steps] + list(z_opt.shape[1:]), dtype=torch.float32, device=device
-    # )
-
-    # # Save projected W for each optimization step.
-    # w_out[step] = w_opt.detach()[0]
-
-    # return w_out if w_plus else w_out.repeat([1, G.mapping.num_ws, 1])
-
-    variable = WVariable(G)
-    for i, (loss, pred) in enumerate(
-        Inverter(G).invert(target, variable, VGGCriterion(), num_steps)
-    ):
-        if outdir is not None and i % 100 == 0:
-            A = target / 255.0
-            B = (pred + 1) / 2
-            save_image(torch.cat((A, B, (A - B).abs())), f"{outdir}/optim_progress.png")
-
-    # projected_w_steps = project(
-    #     G,
-    #     target=,  # pylint: disable=not-callable
-    #     num_steps=num_steps,
-    #     device=device,
-    #     verbose=True,
-    #     outdir=outdir,
-    #     **kwargs,
-    # )
-
-    print(f"Elapsed: {(perf_counter() - start_time):.1f} s")
-
-    # if save_video:
-    #     save_video(G, target, outdir, projected_w_steps)
-
+AIM_FOR_FAKES = True
+TARGET_A_NAME = "img00000013"
+TARGET_B_NAME = "img00000003"
+SEED = 41
 
 if __name__ == "__main__":
-    G = open_network_pkl("pretrained/alpha-adaconv-002600.pkl")
-    outdir = "out/adaconv-cat"
+    G = open_pkl(G_PATH)
 
-    invert(G, "./datasets/samples/cats/00000/img00000003.png", outdir)
-    
+
+    def invert_target(target_name: str, variable):
+        # target = open_target(G, f"./datasets/samples/cats/00000/{target_name}.png")
+        target = sample_image(G) #!!!
+        return invert(
+            G,
+            target=target,
+            variable=variable,
+            out_path=f"{OUT_DIR}/optim_progress_{target_name}.png",
+            num_steps=NUM_STEPS,
+            criterion=CRITERION_TYPE(target),
+            snapshot_frequency=SNAPSHOT_FREQ,
+            optimizer_constructor=OPTIMIZER_CTOR,
+        )
+    torch.manual_seed(SEED)
+
+    A = invert_target(TARGET_A_NAME, VARIABLE_TYPE.sample_from(G))
+    B = invert_target(
+        TARGET_B_NAME,
+        A.final_variable.copy() if SEQUENTIAL else VARIABLE_TYPE.sample_from(G),
+    )
+
+    A.save_losses_plot(f"{OUT_DIR}/losses_{TARGET_A_NAME}.png")
+    B.save_losses_plot(f"{OUT_DIR}/losses_{TARGET_B_NAME}.png")
+
+    A.save_optim_trace(f"{OUT_DIR}/trace_{TARGET_A_NAME}.png")
+    B.save_optim_trace(f"{OUT_DIR}/trace_{TARGET_B_NAME}.png")
+
+    Interpolator(G).interpolate(
+        A.final_variable,
+        B.final_variable,
+    ).save(OUT_DIR + f"/interpolation_{TARGET_A_NAME}_to_{TARGET_B_NAME}.png")
