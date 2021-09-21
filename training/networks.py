@@ -15,7 +15,7 @@ from torch_utils.ops import upfirdn2d
 from torch_utils.ops import bias_act
 from torch_utils.ops import fma
 import torch.nn.functional as F
-
+import math
 
 FREEZE = False
 DISABLE_NOISE = False
@@ -155,9 +155,7 @@ def modulated_conv2d(
                 k = 512
                 w = w * s[:, 0:k, :].repeat(1, max(1, w.shape[1] // k), 1, 1, 1)
         else:
-            raise NotImplementedError
-            s = styles[:, :w.shape[1], :w.shape[2]].unsqueeze(3).unsqueeze(4)
-            w = w * s  # [NOIkk]
+            w = w * styles.reshape(batch_size, 1, -1, 1, 1) # [NOIkk]
     if demodulate:
         dcoefs = (w.square().sum(dim=[2, 3, 4]) + 1e-8).rsqrt()  # [NO]
     if demodulate and fused_modconv:
@@ -462,6 +460,7 @@ class SynthesisLayer(torch.nn.Module):
         if self.use_noise:
             self.register_buffer("noise_const", torch.randn([resolution, resolution]))
             self.noise_strength = torch.nn.Parameter(torch.zeros([]))
+            self.noise_gain = 0.01 if self.use_adaconv else 1
         self.bias = torch.nn.Parameter(torch.zeros([out_channels]))
 
     def forward(self, x, w, noise_mode="random", fused_modconv=True, gain=1):
@@ -484,7 +483,7 @@ class SynthesisLayer(torch.nn.Module):
                 * self.noise_strength
             )
         if self.use_noise and noise_mode == "const":
-            noise = self.noise_const * self.noise_strength
+            noise = self.noise_gain * self.noise_const * self.noise_strength
 
         flip_weight = self.up == 1  # slightly faster
         x = modulated_conv2d(
