@@ -8,13 +8,13 @@ from torchvision.utils import save_image
 
 # todo adaconv
 
-METHOD = "adaconv"
-G_PATH = f"pretrained/alpha-{METHOD}-002600.pkl"
+G_PATH = f"training-runs/chruch_adaconv_no_noise/00000-church32-auto2-gamma100-kimg5000-batch8/network-snapshot-000400.pkl"
 OUT_DIR = f"out"
 BATCH_SIZE = 12
 
+
 if __name__ == "__main__":
-    G = open_pkl(G_PATH)
+    G = open_generator(G_PATH)
 
     style_A = G.mapping(
         torch.randn(BATCH_SIZE, G.num_required_vectors(), G.w_dim).squeeze(1).cuda(), None

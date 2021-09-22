@@ -8,10 +8,8 @@ class InversionCriterion(nn.Module):
 
 
 class VGGCriterion(InversionCriterion):
-    def __init__(self, target: ImageTensor):
+    def __init__(self):
         super().__init__()
-
-        self.target = target.unsqueeze(0).cuda().to(torch.float32)
 
         with dnnlib.util.open_url(
             "https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/metrics/vgg16.pt"

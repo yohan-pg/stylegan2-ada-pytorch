@@ -51,8 +51,7 @@ TARGET_B_NAME = "img00000003"
 SEED = 41
 
 if __name__ == "__main__":
-    G = open_pkl(G_PATH)
-
+    G = open_generator(G_PATH)
 
     def invert_target(target_name: str, variable):
         # target = open_target(G, f"./datasets/samples/cats/00000/{target_name}.png")
@@ -63,7 +62,7 @@ if __name__ == "__main__":
             variable=variable,
             out_path=f"{OUT_DIR}/optim_progress_{target_name}.png",
             num_steps=NUM_STEPS,
-            criterion=CRITERION_TYPE(target),
+            criterion=CRITERION_TYPE(),
             snapshot_frequency=SNAPSHOT_FREQ,
             optimizer_constructor=OPTIMIZER_CTOR,
         )

@@ -1,19 +1,26 @@
 from .prelude import *
 from .variables import *
 
-# import training.networks
 
 # todo move this into a class which opens G than has IO methods?
-# class Generator(training.networks.Generator):
-#     pass
 
-def open_pkl(pkl_path: str):
-    print(f"Loading networks from {pkl_path}...")
+def open_generator(pkl_path: str):
+    print(f"Loading generator from {pkl_path}...")
 
     with dnnlib.util.open_url(pkl_path) as fp:
         return legacy.load_network_pkl(fp)["G_ema"].cuda().eval().requires_grad_(False)  # type: ignore
 
+
+# todo fuse with open-gen        
+def open_discriminator(pkl_path: str):
+    print(f"Loading discriminator from {pkl_path}...")
+
+    with dnnlib.util.open_url(pkl_path) as fp:
+        return legacy.load_network_pkl(fp)["D"].cuda().eval().requires_grad_(False)  # type: ignore
+
         
+
+
 def open_target(G, path: str):
     target_pil = PIL.Image.open(path).convert("RGB")
     w, h = target_pil.size

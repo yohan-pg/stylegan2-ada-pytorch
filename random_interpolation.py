@@ -10,7 +10,7 @@ OUT_DIR = f"out"
 VARIABLE_TYPE = ZVariable
 
 if __name__ == "__main__":
-    G = open_pkl(G_PATH)
+    G = open_generator(G_PATH)
     
     images = []
 

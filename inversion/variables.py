@@ -19,6 +19,9 @@ class Variable(ToStyles, ABC, nn.Module):
     def copy(self):
         return self.__class__(self.G[0], self.params.clone())
 
+    def to_image(self):
+        return (self.G[0].synthesis(self.to_styles(), noise_mode="const") + 1) / 2
+
 
 class WVariable(Variable):
     @classmethod
@@ -45,7 +48,7 @@ class ZVariable(Variable):
         return ZVariable(
             G,
             (
-                torch.rand(batch_size, G.num_required_vectors(), G.z_dim)
+                torch.randn(batch_size, G.num_required_vectors(), G.z_dim)
                 .cuda()
             ).squeeze(1), 
         )
@@ -96,8 +99,8 @@ class WPlusVariable(_Plus, WVariable):
     pass
 
 
-# class ZPlusVariable(_Plus, ZVariable):
-#     pass
+class ZPlusVariable(_Plus, ZVariable):
+    pass
 
 
 class _InitializeAtMean:

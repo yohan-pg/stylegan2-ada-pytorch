@@ -148,7 +148,7 @@ def modulated_conv2d(
                 w = w.reshape(B, O, I, Kw, Kw)
             else:
                 s = styles[:, : w.shape[1], : w.shape[2]].unsqueeze(3).unsqueeze(4)
-                k = 64 #!!!!!!!!
+                k = 512
                 w = w * s[:, 0:k, :].repeat(1, max(1, w.shape[1] // k), 1, 1, 1)
         else:
             w = w * styles.reshape(batch_size, 1, -1, 1, 1)  # [NOIkk]
@@ -795,7 +795,6 @@ class SynthesisNetwork(torch.nn.Module):
 
             for res in self.block_resolutions:
                 block = getattr(self, f"b{res}")
-                breakpoint()
                 block_ws.append(
                     ws.narrow(
                         1,

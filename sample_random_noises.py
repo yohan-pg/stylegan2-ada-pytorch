@@ -11,7 +11,7 @@ G_PATH = f"pretrained/alpha-{METHOD}-002600.pkl"
 OUT_DIR = f"out"
 
 if __name__ == "__main__":
-    G = open_pkl(G_PATH)
+    G = open_generator(G_PATH)
 
     z = torch.randn(1, G.num_required_vectors(), G.w_dim).squeeze(1).repeat(32, 1, 1).cuda()
 
