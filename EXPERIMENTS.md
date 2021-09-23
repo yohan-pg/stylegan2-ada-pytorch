@@ -33,8 +33,7 @@ THE PROBLEM IS WITH THE GAMMA FACTOR
 
 =) Bring back style mixing 
     *) Fixed the division to be exactly between groups of 512
-    -) Train with it -> It trained without the groups of 512, it will surely work with it as well...
-    -) Add a flag to turn it off, and double check that the performance didn't regress because of some other detail
+    *) Train with it -> It trained without the groups of 512, it will surely work with it as well...
     -) Make it work for wplus sampling, both for adain and adaconv
 
 =) Try baking it as a convolution! 
@@ -45,20 +44,17 @@ THE PROBLEM IS WITH THE GAMMA FACTOR
     -) Try to combine with the noise naïvely. Does it make a difference?
     -) Work out the math. Why are there transpositions?
 
-=) Bring back PPL -> It seems to work, but will need to review that it performs well
+=) Bring back PPL regularization -> It seems to work, but will need to review that it performs well
     *) Fix problem with the gradient -> It's their custom op. They train WITHOUT fusion, and then add the `conv2d_gradfix.no_weight_gradients()` flag when measuring the PPL? I'm so confused.
-    -) PPL is making everything slow?
-    -) The levels are not similar, because we are averaging
-    -) Train with it
-    -) It slows us down, from 17s/kimg to 21s/kimg. What gives?
+    *) Train with it.
+    -) Train AdaIN fused and unfused, to compare that our performance deosn't drop.
+    -) The levels are not similar, because we are averaging. Train with and without, to compare. Train our adaconv, and look at the PPL loss
     -) Double check that the math being done makes sense. Are the values comparable to the old?
 
 =) Bring back optimizable noise. The issue seems to be, the network ignores the style, and only uses the noise. -> IT FAILS
     *) It seems to get out of the collapse past a certain point! Is the performance still as good?
-        -) Comapre performance with and without.
-        -) Compare without the style mixing. Was it the mixing that solved everything?
     -) Try with the whole stylegan2 config
-    -) Try to train with adaconv
+    *) Gamma 100 doesn't save us
 
 -) Retry freezing the mapper? Make sure it doesn't help.
 
@@ -68,12 +64,11 @@ THE PROBLEM IS WITH THE GAMMA FACTOR
     -) Recall seems low. What gives?
         -) Maybe it's the perceptual distance that is falling appart on 32x32. But then, why doesn't it suck with the baseline?
             *) Try on a higher resolution. 
+            *) We get a decent gamma score when the style collapses and all the training happens in the noise (0.17 after just 200k imgs). Maybe we just need the noise?
             -) Try with MSE in the eval code instead of perceptual?
         -) What is the impact of the gamma factor on the recall, when using our baseline?
 
--) Bring back data augmentation.
-
--) Fix the PPL eval script.
+*) Bring back data augmentation.
 
 -) Get 16 bit training working again! Provided it is easy.
 
@@ -82,9 +77,17 @@ THE PROBLEM IS WITH THE GAMMA FACTOR
     -) Train a baseline for 1M
     -) Update the optim script and compare
 
+# Real Conv
+- With the SG2 normalization applies to the style matrix, it does not seem to train. noise/no-noise, plus id/no plus id (centered at 0), gamma 10/100.
+- Without it, it does seem to train. So far I tried without plus id, just centered at 0. With plus ID it seems to work negligably better. Mul by sqrt(512) (before the +I) also works, but appears to slow down convergence a bit... Div by sqrt(512) performs a bit better than both. 
+- Next up, try with the noise again, then with baking (without plus ID, different factors, etc.). 
+
 # Low prio
 -) Once finished, abalate every change (noise, ppl, gamma, mixing, etc.) to understand their effect better
 -) Hyperparameter search on the ideal gamma factor, but only once everything else is in place. 
 -) Double check the SG2 configuration (which will be our final config)
 -) Can we train on W+ with our thing?
 -) Double check quality with/without injection in ToRGB 
+
+
+

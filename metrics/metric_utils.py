@@ -326,7 +326,7 @@ def compute_feature_stats_for_generator(
     # Setup generator and load labels.
     G = copy.deepcopy(opts.G).eval().requires_grad_(False).to(opts.device)
     dataset = dnnlib.util.construct_class_by_name(**opts.dataset_kwargs)
-
+    
     # Image generation func.
     def run_generator(z, c):
         img = G(z=z, c=c, **opts.G_kwargs)

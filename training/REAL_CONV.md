@@ -1,0 +1,1 @@
+x = S.bmm(x.reshape(x.shape[0], x.shape[1], -1)).reshape(x.shape)

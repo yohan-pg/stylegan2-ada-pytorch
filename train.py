@@ -8,7 +8,6 @@
 
 """Train a GAN using the techniques described in the paper
 "Training Generative Adversarial Networks with Limited Data"."""
-
 import os
 import click
 import re
@@ -188,6 +187,18 @@ def setup_training_loop_kwargs(
             ramp=0.05,
             map=2,
         ),  # Populated dynamically based on resolution and GPU count.
+        "auto0": dict(
+            ref_gpus=-1,
+            kimg=25000,
+            mb=-1,
+            mbstd=-1,
+            fmaps=-1,
+            lrate=-1,
+            gamma=-1,
+            ema=-1,
+            ramp=0.05,
+            map=0, 
+        ),  # Populated dynamically based on resolution and GPU count.
         "custom": dict(
             ref_gpus=-1,
             kimg=25000,
@@ -264,7 +275,7 @@ def setup_training_loop_kwargs(
 
     assert cfg in cfg_specs
     spec = dnnlib.EasyDict(cfg_specs[cfg])
-    if cfg in ["auto", "custom"]:
+    if cfg in ["auto", "custom", "auto0"]:
         desc += f"{gpus:d}"
         spec.ref_gpus = gpus
         res = args.training_set_kwargs.resolution
@@ -306,7 +317,7 @@ def setup_training_loop_kwargs(
     ) = 4  # enable mixed-precision training
     args.G_kwargs.synthesis_kwargs.conv_clamp = (
         args.D_kwargs.conv_clamp
-    ) = None  # clamp activations to avoid float16 overflow #!!!was 256
+    ) = 256  # clamp activations to avoid float16 overflow 
     args.D_kwargs.epilogue_kwargs.mbstd_group_size = spec.mbstd
 
     args.G_opt_kwargs = dnnlib.EasyDict(
@@ -663,7 +674,7 @@ class CommaSeparatedList(click.ParamType):
     "--cfg",
     help="Base config [default: auto]",
     type=click.Choice(
-        ["auto", "stylegan2", "paper256", "paper512", "paper1024", "cifar", "custom"]
+        ["auto", "stylegan2", "paper256", "paper512", "paper1024", "cifar", "custom", "auto0"]
     ),
 )
 @click.option("--gamma", help="Override R1 gamma", type=float)
