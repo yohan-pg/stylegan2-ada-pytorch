@@ -5,16 +5,20 @@ from inversion import *
 # todo double check that VGG loss inputs are the right size and range and everything
 
 METHOD = "adain"
-G_PATH = f"pretrained/alpha-{METHOD}-002600.pkl"
+G_PATH = "pretrained/resnet-adain-000800.pkl"
+# G_PATH = f"pretrained/resnet-{METHOD}-000800.pkl"
+
 OUT_DIR = f"out"
-VARIABLE_TYPE = ZVariable
+VARIABLE_TYPE = WVariable
+BATCH_SIZE = 12
 
 if __name__ == "__main__":
-    G = open_generator(G_PATH)
-    
-    images = []
+    with torch.no_grad():
+        G = open_generator(G_PATH)
 
-    Interpolator(G).interpolate(
-        VARIABLE_TYPE.sample_from(G, batch_size = 4), 
-        VARIABLE_TYPE.sample_from(G, batch_size = 4)
-    ).save(OUT_DIR + f"/fake_interpolation_{METHOD}.png")
+        images = []
+        
+        Interpolator(G).interpolate(
+            VARIABLE_TYPE.sample_from(G, batch_size=BATCH_SIZE),
+            VARIABLE_TYPE.sample_from(G, batch_size=BATCH_SIZE),
+        ).save(OUT_DIR + f"/fake_interpolation_{METHOD}.png")

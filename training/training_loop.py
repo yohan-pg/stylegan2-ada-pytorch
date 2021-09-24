@@ -144,6 +144,7 @@ def training_loop(
     # Load training set.
     if rank == 0:
         print("Loading training set...")
+        
     training_set = dnnlib.util.construct_class_by_name(
         **training_set_kwargs
     )  # subclass of training.dataset.Dataset

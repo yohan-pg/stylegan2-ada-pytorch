@@ -18,17 +18,19 @@ class Interpolator:
             frames.append((self.G.synthesis(variables[-1].to_styles()) + 1) / 2)
 
         return Interpolation(variables, frames)
-    
+
 
 @dataclass(eq=False)
 class Interpolation:
     variables: List[Variable]
     frames: List[torch.Tensor]
 
+    def grid(self):  # todo rename to these photo sequence things
+        return torch.cat(self.frames)
+
     def save(self, out_path: str) -> None:
         # todo save an "interpolation" class instead
-        save_image(torch.cat(self.frames), out_path, nrow=len(self.frames[0]))
-        
+        save_image(self.grid(), out_path, nrow=len(self.frames[0]))
 
     def compute_ppl(self, criterion) -> torch.Tensor:
         total = 0.0

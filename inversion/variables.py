@@ -3,10 +3,10 @@ from .prelude import *
 
 class Variable(ToStyles, ABC, nn.Module):
     @final
-    def __init__(self, G, params: torch.Tensor):
+    def __init__(self, G, params: torch.Tensor): # todo rename "params" to "data" to avoid confusion
         super().__init__()
         self.G = [G]
-        self.params = nn.Parameter(params)  # todo assert shape
+        self.params = params  # todo assert shape
 
     @abstractclassmethod
     def sample_from(cls, G: nn.Module, batch_size: int = 1):
@@ -19,8 +19,16 @@ class Variable(ToStyles, ABC, nn.Module):
     def copy(self):
         return self.__class__(self.G[0], self.params.clone())
 
-    def to_image(self):
-        return (self.G[0].synthesis(self.to_styles(), noise_mode="const") + 1) / 2
+    def to_image(self, const_noise: bool = True):
+        return (
+            self.G[0].synthesis(
+                self.to_styles(), noise_mode="const" if const_noise else "random"
+            )
+            + 1
+        ) / 2
+
+    def split_into_individual_variables(self):
+        return [self.__class__(self.G[0], p.unsqueeze(0)) for p in self.params]
 
 
 class WVariable(Variable):
@@ -28,18 +36,87 @@ class WVariable(Variable):
     def sample_from(cls, G: nn.Module, batch_size: int = 1):
         return WVariable(
             G,
-            G.mapping(
-                (torch.randn(1, G.num_required_vectors(), G.z_dim).squeeze(1).cuda()),
-                None,
-            )[:, : G.num_required_vectors(), :],
+            nn.Parameter(
+                G.mapping(
+                    (
+                        torch.randn(batch_size, G.num_required_vectors(), G.z_dim)
+                        .squeeze(1)
+                        .cuda()
+                    ),
+                    None,
+                )[:, : G.num_required_vectors(), :]
+            ),
         )
 
     def interpolate(self, other: "WVariable", alpha: float) -> Styles:
         assert self.G == other.G
-        return self.__class__(self.G[0], (1.0 - alpha) * self.params + alpha * other.params)
+        return self.__class__(
+            self.G[0], (1.0 - alpha) * self.params + alpha * other.params
+        )
 
     def to_styles(self) -> Styles:
         return self.params.repeat(1, self.G[0].num_ws, 1)
+
+
+class WConvexCombinationVariable(Variable):
+    class Params(nn.Module):
+        def __init__(self, points, coefficients):
+            super().__init__()
+            self.points = points
+            self.coefficients = coefficients
+
+        def clone(self):
+            return WConvexCombinationVariable.Params(self.points, self.coefficients)
+
+    @classmethod
+    def sample_from(
+        cls,
+        G: nn.Module,
+        batch_size: int = 1,
+        num_points: int = 100_000,
+        inflation: float = 1.0,
+    ):
+        with torch.no_grad():
+            temp = G.mapping.sample_for_adaconv
+            G.mapping.sample_for_adaconv = False
+            points = G.mapping(torch.randn(num_points, G.z_dim).cuda(), None).mean(
+                dim=1
+            )
+            G.mapping.sample_for_adaconv = temp
+            points = points + inflation * (points - G.mapping.w_avg.unsqueeze(0))
+
+        var = WConvexCombinationVariable(
+            G,
+            WConvexCombinationVariable.Params(
+                points,
+                nn.Parameter(
+                    torch.randn(batch_size, G.num_required_vectors(), num_points).cuda()
+                    / num_points
+                ),
+            ),
+        )
+
+        return var
+
+    def interpolate(self, other: "WConvexCombinationVariable", alpha: float) -> Styles:
+        assert self.G == other.G
+        return self.__class__(
+            self.G[0],
+            WConvexCombinationVariable.Params(
+                (1.0 - alpha) * self.params.points + alpha * other.params.points,
+                (1.0 - alpha) * self.params.coefficients
+                + alpha * other.params.coefficients,
+            ),
+        )
+
+    def to_styles(self) -> Styles:
+        B, V, N = self.params.coefficients.shape
+        mix = F.softmax(self.params.coefficients, dim=2)
+        return (
+            (mix.reshape(B * V, N) @ self.params.points)
+            .reshape(B, V, -1)
+            .repeat(1, self.G[0].num_ws, 1)
+        ).squeeze(1)
 
 
 class ZVariable(Variable):
@@ -47,10 +124,11 @@ class ZVariable(Variable):
     def sample_from(cls, G: nn.Module, batch_size: int = 1):
         return ZVariable(
             G,
-            (
-                torch.randn(batch_size, G.num_required_vectors(), G.z_dim)
-                .cuda()
-            ).squeeze(1), 
+            nn.Parameter(
+                (
+                    torch.randn(batch_size, G.num_required_vectors(), G.z_dim).cuda()
+                ).squeeze(1)
+            ),
         )
 
     # def interpolate(self, other: "ZVariable", alpha: float) -> Styles:
@@ -68,7 +146,7 @@ class ZVariable(Variable):
     #         d = a * torch.cos(p) + c * torch.sin(p)
     #         d = d / d.norm(dim=-1, keepdim=True)
     #         return d
-            
+
     #     return ZVariable(
     #         self.G[0],
     #         slerp(
@@ -77,7 +155,7 @@ class ZVariable(Variable):
     #             alpha,
     #         ),
     #     )
-    
+
     interpolate = WVariable.interpolate
 
     def to_styles(self):
@@ -86,20 +164,20 @@ class ZVariable(Variable):
         return self.G[0].mapping(self.params, None)
 
 
-class _Plus:
+class PlusVariable(ABC):
     @classmethod
     def sample_from(cls, G: nn.Module, batch_size: int = 1):
-        return cls(G, super().to_styles(super().sample_from(G)))
+        return cls(G, nn.Parameter(super().to_styles(super().sample_from(G))))
 
     def to_styles(self) -> Styles:
         return self.params
 
 
-class WPlusVariable(_Plus, WVariable):
+class WPlusVariable(PlusVariable, WVariable):
     pass
 
 
-class ZPlusVariable(_Plus, ZVariable):
+class ZPlusVariable(PlusVariable, ZVariable):
     pass
 
 
@@ -108,21 +186,14 @@ class _InitializeAtMean:
     def sample_from(
         cls, G: nn.Module, num_samples: int = 1000, batch_size: int = 10
     ):  #! can't parameterize this
-        # w_avg = torch.zeros(1, G.num_required_vectors(), G.z_dim).cuda()
-
-        # num_batches = num_samples // batch_size
-        # assert num_batches >= 1
-
-        # for _ in range(num_batches):
-        #     z_samples = (
-        #         torch.randn(batch_size, G.num_required_vectors(), G.z_dim)
-        #         .squeeze(1)
-        #         .cuda()
-        #     )  # [N, V, C]
-        #     w_samples = G.mapping(z_samples, None)  # [N, V*L, C]
-        #     w_samples = w_samples[:, : G.num_required_vectors(), :]  # [N, V, C]
-        #     w_avg += torch.mean(w_samples, dim=0, keepdim=True) / num_batches
-        return cls(G, G.mapping.w_avg.reshape(1, 1, G.w_dim).repeat(1, G.num_required_vectors(), 1))
+        return nn.Parameter(
+            cls(
+                G,
+                G.mapping.w_avg.reshape(1, 1, G.w_dim).repeat(
+                    1, G.num_required_vectors(), 1
+                ),
+            )
+        )
 
     def to_styles(self) -> Styles:
         return super().to_styles()
@@ -140,5 +211,5 @@ class WVariableInitAtMean(_InitializeAtMean, WVariable):
     pass
 
 
-class WPlusVariableInitAtMean(_Plus, _InitializeAtMean, WVariable):
+class WPlusVariableInitAtMean(PlusVariable, _InitializeAtMean, WVariable):
     pass
