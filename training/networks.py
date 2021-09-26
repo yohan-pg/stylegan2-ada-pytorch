@@ -17,8 +17,6 @@ from torch_utils.ops import fma
 import torch.nn.functional as F
 import math
 
-from .ops import *
-
 DISABLE_NOISE = True #!!!
 BAKE_CONVS = False
 
@@ -148,8 +146,13 @@ def modulated_conv2d(
                 )
                 w = w.reshape(B, O, I, Kw, Kw)
             else:
+                # styles = styles.transpose(1, 2)  #!!!
                 s = styles[:, : w.shape[1], : w.shape[2]].unsqueeze(3).unsqueeze(4)
                 k = 512
+                # skip = torch.eye(max(w.shape[1], w.shape[2])).unsqueeze(0).unsqueeze(3).unsqueeze(4).cuda()[:, : w.shape[1], : w.shape[2]]
+                # print(s.shape, skip.shape, w.shape)
+                # s = s + skip
+                
                 w = w * s[:, 0:k, :].repeat(1, max(1, w.shape[1] // k), 1, 1, 1)
         else:
             w = w * styles.reshape(batch_size, 1, -1, 1, 1)  # [NOIkk]
@@ -331,7 +334,7 @@ class MappingNetwork(torch.nn.Module):
             layer = FullyConnectedLayer(
                 in_features,
                 out_features,
-                activation=activation,
+                activation="linear" if num_layers == 1 else activation,
                 lr_multiplier=lr_multiplier,  # (100 if sample_for_adaconv else 1)
                 orthogonal_init=orthogonal_init,
             )
@@ -550,7 +553,7 @@ class ToRGBLayer(torch.nn.Module):
         else:
             styles = self.affine(w)
 
-        styles = styles * self.weight_gain #!!!breaks conv
+        styles = styles * self.weight_gain #!! breaks conv
         x = modulated_conv2d(
             x=x,
             weight=self.weight,
@@ -809,9 +812,13 @@ class SynthesisNetwork(torch.nn.Module):
                 w_idx += block.num_conv
 
         x = img = None
+        
+        self.imgs = []
+
         for res, cur_ws in zip(self.block_resolutions, block_ws):
             block = getattr(self, f"b{res}")
             x, img = block(x, img, cur_ws, **block_kwargs)
+            self.imgs.append(img)
 
         return img
 
