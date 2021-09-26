@@ -11,6 +11,7 @@ import torch
 from torch_utils import training_stats
 from torch_utils import misc
 from torch_utils.ops import conv2d_gradfix
+import math 
 
 # ----------------------------------------------------------------------------
 
@@ -60,7 +61,7 @@ class StyleGAN2Loss(Loss):
         if self.style_mixing_prob > 0:
             with torch.autograd.profiler.record_function("style_mixing"):
                 num_vecs = self.G_mapping.module.num_required_vectors() if isinstance(self.G_mapping, torch.nn.parallel.DistributedDataParallel) else self.G_mapping.num_required_vectors()
-                num_injection_points = ws.shape[1] // num_vecs
+                num_injection_points = self.G_mapping.num_ws
                 cutoff = torch.empty([], dtype=torch.int64, device=ws.device).random_(
                     1, num_injection_points
                 )  # * Picks a number, say '5'
@@ -69,12 +70,11 @@ class StyleGAN2Loss(Loss):
                     cutoff,
                     torch.full_like(cutoff, num_injection_points),
                 ) * num_vecs  # * Randomly chooses to apply the cutoff or not with probability 'style_mixing_prob' (returns a sentinel value)
+                ws2 = self.G_mapping(torch.randn_like(z), c, skip_w_avg_update=True)
                 ws = torch.cat(
                     (
                         ws[:, :cutoff],
-                        self.G_mapping(torch.randn_like(z), c, skip_w_avg_update=True)[
-                            :, cutoff:
-                        ],
+                        ws2[:, cutoff:],
                     ),
                     dim=1,
                 )  # * Update up to the cutoff using the mapper (if we aren't applying it, update the entire vector)
@@ -114,28 +114,27 @@ class StyleGAN2Loss(Loss):
                 with torch.autograd.profiler.record_function("Gmain_backward"):
                     loss_Gmain.mean().mul(gain).backward()
 
-            # !!! performance regression?
             # Gpl: Apply path length regularization.
             if do_Gpl:
                 with torch.autograd.profiler.record_function("Gpl_forward"):
                     batch_size = gen_z.shape[0] // self.pl_batch_shrink
                     gen_img, gen_ws = self.run_G(
-                        gen_z[:batch_size], gen_c[:batch_size], sync=sync
+                        gen_z[:batch_size].requires_grad_(True), gen_c[:batch_size], sync=sync
                     )
                     pl_noise = torch.randn_like(gen_img) / np.sqrt(
                         gen_img.shape[2] * gen_img.shape[3]
                     )
                     with torch.autograd.profiler.record_function(
                         "pl_grads"
-                    ): #!!,conv2d_gradfix.no_weight_gradients()
-                        #! on DDP: "This module doesn’t work with torch.autograd.grad() (i.e. it will only work if gradients are to be accumulated in .grad attributes of parameters)." Then why does this work?
+                    ): #conv2d_gradfix.no_weight_gradients()
                         pl_grads = torch.autograd.grad(
                             outputs=[(gen_img * pl_noise).sum()],
                             inputs=[gen_ws],
                             create_graph=True,
                             only_inputs=True,
-                        )[0] # ? (* self.G_mapping.num_required_vectors())
-                    pl_lengths = pl_grads.square().sum(2).mean(1).sqrt()
+                        )[0]
+                    M = self.G_mapping.module if isinstance(self.G_mapping, torch.nn.parallel.DistributedDataParallel) else self.G_mapping
+                    pl_lengths = pl_grads.square().sum(2).mean(1).sqrt() * math.sqrt(M.num_required_vectors())
                     pl_mean = self.pl_mean.lerp(pl_lengths.mean(), self.pl_decay)
                     self.pl_mean.copy_(pl_mean.detach())
                     pl_penalty = (pl_lengths - pl_mean).square()

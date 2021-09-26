@@ -64,6 +64,24 @@ def interpolate_images(
         f"{outdir}/mix_{name_1}_{name_2}.png"
     )
 
+    # Synthesize the result of a Z projection.
+    print(f"Interpolating images on Z")
+
+    imgs = []
+    for i in range(7):
+        print(i)
+        alpha = i / (num_steps - 1)
+        img = G.synthesis(G.mapping((1.0 - alpha) * w1[:, :G.num_required_vectors()] + alpha * w2[:, :G.num_required_vectors()], None), noise_mode="const")
+        imgs.append(img)
+    print()
+
+    name_1 = w1_path.split("/")[-1]
+    name_2 = w2_path.split("/")[-1]
+    mosaic = torch.cat(imgs, dim=3)
+    PIL.Image.fromarray(convert(mosaic)[0].cpu().numpy(), "RGB").save(
+        f"{outdir}/mix_z_{name_1}_{name_2}.png"
+    )
+
 
 # ----------------------------------------------------------------------------
 

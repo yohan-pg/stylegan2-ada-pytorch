@@ -87,7 +87,7 @@ class Dataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         image = self._load_raw_image(self._raw_idx[idx])
         assert isinstance(image, np.ndarray)
-        assert list(image.shape) == self.image_shape
+        assert list(image.shape) == self.image_shape, breakpoint()
         assert image.dtype == np.uint8
         if self._xflip[idx]:
             assert image.ndim == 3  # CHW
@@ -231,7 +231,10 @@ class ImageFolderDataset(Dataset):
                 image = np.array(PIL.Image.open(f))
         if image.ndim == 2:
             image = image[:, :, np.newaxis]  # HW => HWC
-        image = image.transpose(2, 0, 1)  # HWC => CHW
+        try:
+            image = image.transpose(2, 0, 1)  # HWC => CHW
+        except:
+            breakpoint()
         return image
 
     def _load_raw_labels(self):

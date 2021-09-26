@@ -7,5 +7,6 @@ python train.py \
     --snap 50 \
     --gamma 10 \
     --gpus=2 \
+    --fp32 True \
     --outdir="./training-runs/$1" \
     "${@:2}"
