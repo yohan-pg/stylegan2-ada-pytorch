@@ -61,7 +61,7 @@ class StyleGAN2Loss(Loss):
         if self.style_mixing_prob > 0:
             with torch.autograd.profiler.record_function("style_mixing"):
                 num_vecs = self.G_mapping.module.num_required_vectors() if isinstance(self.G_mapping, torch.nn.parallel.DistributedDataParallel) else self.G_mapping.num_required_vectors()
-                num_injection_points = ws.shape[1] // num_vecs
+                num_injection_points = self.G_mapping.num_ws
                 cutoff = torch.empty([], dtype=torch.int64, device=ws.device).random_(
                     1, num_injection_points
                 )  # * Picks a number, say '5'
@@ -70,12 +70,11 @@ class StyleGAN2Loss(Loss):
                     cutoff,
                     torch.full_like(cutoff, num_injection_points),
                 ) * num_vecs  # * Randomly chooses to apply the cutoff or not with probability 'style_mixing_prob' (returns a sentinel value)
+                ws2 = self.G_mapping(torch.randn_like(z), c, skip_w_avg_update=True)
                 ws = torch.cat(
                     (
                         ws[:, :cutoff],
-                        self.G_mapping(torch.randn_like(z), c, skip_w_avg_update=True)[
-                            :, cutoff:
-                        ],
+                        ws2[:, cutoff:],
                     ),
                     dim=1,
                 )  # * Update up to the cutoff using the mapper (if we aren't applying it, update the entire vector)

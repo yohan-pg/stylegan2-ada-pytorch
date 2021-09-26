@@ -5,19 +5,26 @@ class OptimizationConstraint:
 
 
 class StyleJittering(OptimizationConstraint):
-    def __init__(self, variable, initial_noise_factor, noise_ramp_lenght):
+    def __init__(self, variable, initial_noise_factor=0.05, noise_ramp_length=0.75):
+        super().__init__()
         self.variable = variable
+        self.initial_noise_factor = initial_noise_factor
+        self.noise_ramp_length = noise_ramp_length
 
     def update(self, t):
         w = self.variable.variable_to_style() # todo is this really applied after style mixing?
-        w_noise_scale = (
+        self.w_noise_scale = (
             self.w_std
             * self.initial_noise_factor
             * max(0.0, 1.0 - t / self.noise_ramp_length) ** 2
         )
         w_noise = torch.randn_like(w) * w_noise_scale
-        w_noise = None
-        return w + w_noise # !!
+
+    def to_styles(self):
+        # todo, should this be before replication?
+        # return w + w_noise # !!
+        return self.variable.to_styles() 
+
 
 
 class NoiseJittering(OptimizationConstraint):

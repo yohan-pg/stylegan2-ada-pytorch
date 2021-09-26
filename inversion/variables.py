@@ -20,9 +20,12 @@ class Variable(ToStyles, ABC, nn.Module):
         return self.__class__(self.G[0], self.params.clone())
 
     def to_image(self, const_noise: bool = True):
+        return self.styles_to_image(self.to_styles(), const_noise)
+    
+    def styles_to_image(self, styles, const_noise: bool = True):
         return (
             self.G[0].synthesis(
-                self.to_styles(), noise_mode="const" if const_noise else "random"
+                styles, noise_mode="const" if const_noise else "random"
             )
             + 1
         ) / 2
@@ -44,6 +47,7 @@ class WVariable(Variable):
                         .cuda()
                     ),
                     None,
+                    skip_w_avg_update=True
                 )[:, : G.num_required_vectors(), :]
             ),
         )
@@ -79,7 +83,7 @@ class WConvexCombinationVariable(Variable):
         with torch.no_grad():
             temp = G.mapping.sample_for_adaconv
             G.mapping.sample_for_adaconv = False
-            points = G.mapping(torch.randn(num_points, G.z_dim).cuda(), None).mean(
+            points = G.mapping(torch.randn(num_points, G.z_dim).cuda(), None, skip_w_avg_update=True).mean(
                 dim=1
             )
             G.mapping.sample_for_adaconv = temp
@@ -186,14 +190,12 @@ class _InitializeAtMean:
     def sample_from(
         cls, G: nn.Module, num_samples: int = 1000, batch_size: int = 10
     ):  #! can't parameterize this
-        return nn.Parameter(
-            cls(
+        return cls(
                 G,
-                G.mapping.w_avg.reshape(1, 1, G.w_dim).repeat(
+                nn.Parameter(G.mapping.w_avg.reshape(1, 1, G.w_dim).repeat(
                     1, G.num_required_vectors(), 1
-                ),
+                )),
             )
-        )
 
     def to_styles(self) -> Styles:
         return super().to_styles()
@@ -213,3 +215,4 @@ class WVariableInitAtMean(_InitializeAtMean, WVariable):
 
 class WPlusVariableInitAtMean(PlusVariable, _InitializeAtMean, WVariable):
     pass
+

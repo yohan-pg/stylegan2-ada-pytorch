@@ -17,6 +17,7 @@ from torch_utils.ops import fma
 import torch.nn.functional as F
 import math
 
+from .ops import *
 
 DISABLE_NOISE = True #!!!
 BAKE_CONVS = False
@@ -399,7 +400,6 @@ class MappingNetwork(torch.nn.Module):
                 assert z.ndim == 3
                 assert z.shape[1] == num_vectors
                 assert z.shape[2] == self.z_dim
-
                 return (
                     self._forward(
                         z.reshape(z.shape[0] * num_vectors, self.z_dim), c, **kwargs
@@ -786,10 +786,12 @@ class SynthesisNetwork(torch.nn.Module):
                 ws,
                 [
                     None,
-                    self.w_dim * self.num_ws if self.use_adaconv else self.num_ws,
+                    None if self.use_adaconv else self.num_ws,
                     self.w_dim,
                 ],
             )
+
+            num_required_vectors = ws.shape[1] // self.num_ws
             ws = ws.to(torch.float32)
             w_idx = 0
 
@@ -798,9 +800,9 @@ class SynthesisNetwork(torch.nn.Module):
                 block_ws.append(
                     ws.narrow(
                         1,
-                        w_idx * self.w_dim,
-                        (block.num_conv + block.num_torgb) * self.w_dim,
-                    ) #!!! double check
+                        w_idx * num_required_vectors,
+                        (block.num_conv + block.num_torgb) * num_required_vectors,
+                    ) 
                     if self.use_adaconv
                     else ws.narrow(1, w_idx, block.num_conv + block.num_torgb)
                 )
