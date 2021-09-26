@@ -200,7 +200,7 @@ def _reconstruct_persistent_obj(meta):
         assert meta is not None
 
     assert meta.version == _version
-    module = _src_to_module(meta.module_src)
+    module = _src_to_module(meta.module_src.replace("from .ops import *", ""))
 
     assert meta.type == "class"
     orig_class = module.__dict__[meta.class_name]

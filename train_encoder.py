@@ -60,14 +60,14 @@ PKL_PATH = f"pretrained/alpha-{METHOD}-002600.pkl"
 GAIN = 1 / math.sqrt(512) if METHOD == "adaconv" else 1.0 
 HEAD_GAIN = 1.0 if METHOD == "adaconv" else 1.0
 VARIABLE_TYPE = WVariable if METHOD == "adaconv" else WPlusVariable
-LEARNING_RATE = 1e-3  #!!! was 1e-3
+LEARNING_RATE = 1e-3 
 FINE_TUNE_GENERATOR = False
 FINE_TUNE_DISCRIMINATOR = False
 BETA_1 = 0.0
 BETA_2 = 0.0
 
 BATCH_SIZE = 4
-SUBSET_SIZE = 200
+SUBSET_SIZE = None
 DISCR_WEIGHT = 0.0
 
 
@@ -94,7 +94,7 @@ if __name__ == "__main__":
     #         open_target(G, "./datasets/samples/cats/00000/img00000010.png"),
     #     )
     # )
-    criterion = lambda preds, targets: vgg(preds, targets)  #!!!
+    criterion = lambda preds, targets: vgg(preds, targets) 
     # + DISCR_WEIGHT * torch.nn.functional.softplus(
     # -D(preds, None)
     # ).mean()
@@ -117,7 +117,7 @@ if __name__ == "__main__":
                 f"out/encoding_interpolation.png",
             )
 
-        if i % 10_000 == 0:
+        if i % 50_000 == 0:
             save_pickle(
                 dict(E=encoder, G_ema=G, D=D),  # todo ema?
                 os.path.join("out", f"encoder-snapshot-{i//1_000:06d}.pkl"),

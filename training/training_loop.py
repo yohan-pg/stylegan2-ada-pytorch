@@ -536,6 +536,20 @@ def training_loop(
                     grid_size=grid_size,
                 )
 
+                mix_batch_size=8
+                save_image(
+                    sample_mix(G, mix_batch_size), 
+                    os.path.join(run_dir, f"style_mixing{cur_nimg//1000:06d}.png"), 
+                    nrow=mix_batch_size
+                )
+
+                grid = torch.cat([torch.nn.functional.interpolate(img, size=G.synthesis.imgs[-1].shape[2:4]) for img in G.synthesis.imgs])
+                save_image(
+                    grid, 
+                    os.path.join(run_dir, f"torgb{cur_nimg//1000:06d}.png"), 
+                    nrow=len(G.synthesis.imgs[0])
+                )
+
         # Save network snapshot.
         snapshot_pkl = None
         snapshot_data = None

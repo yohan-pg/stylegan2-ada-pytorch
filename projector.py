@@ -48,7 +48,7 @@ def project(
     use_vgg=True,
     optimize_noise=True,
     schedule_lr=True,
-    add_noise_to_w=True,  #!!!
+    add_noise_to_w=True, 
     w_plus=False,
     optimize_on_z=True,
     outdir=None,
