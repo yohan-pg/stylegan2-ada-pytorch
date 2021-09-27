@@ -549,6 +549,16 @@ def training_loop(
                     os.path.join(run_dir, f"torgb{cur_nimg//1000:06d}.png"), 
                     nrow=len(G.synthesis.imgs[0])
                 )
+                save_image(
+                    grid.abs(), 
+                    os.path.join(run_dir, f"torgb_abs{cur_nimg//1000:06d}.png"), 
+                    nrow=len(G.synthesis.imgs[0])
+                )
+                save_image(
+                    -grid, 
+                    os.path.join(run_dir, f"torgb_neg{cur_nimg//1000:06d}.png"), 
+                    nrow=len(G.synthesis.imgs[0])
+                )
 
         # Save network snapshot.
         snapshot_pkl = None

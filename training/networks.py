@@ -146,13 +146,8 @@ def modulated_conv2d(
                 )
                 w = w.reshape(B, O, I, Kw, Kw)
             else:
-                # styles = styles.transpose(1, 2)  #!!!
                 s = styles[:, : w.shape[1], : w.shape[2]].unsqueeze(3).unsqueeze(4)
-                k = 512
-                # skip = torch.eye(max(w.shape[1], w.shape[2])).unsqueeze(0).unsqueeze(3).unsqueeze(4).cuda()[:, : w.shape[1], : w.shape[2]]
-                # print(s.shape, skip.shape, w.shape)
-                # s = s + skip
-                
+                k = 32
                 w = w * s[:, 0:k, :].repeat(1, max(1, w.shape[1] // k), 1, 1, 1)
         else:
             w = w * styles.reshape(batch_size, 1, -1, 1, 1)  # [NOIkk]
@@ -207,6 +202,7 @@ def modulated_conv2d(
         flip_weight=flip_weight,
     )
     x = x.reshape(batch_size, -1, *x.shape[2:])
+    x = torch.nn.InstanceNorm2d(x.shape[1], affine=False)(x) #!!!
     if noise is not None:
         x = x.add_(noise)
     return x
@@ -553,14 +549,19 @@ class ToRGBLayer(torch.nn.Module):
         else:
             styles = self.affine(w)
 
-        styles = styles * self.weight_gain #!! breaks conv
-        x = modulated_conv2d(
+        # styles = styles * self.weight_gain 
+        # x = modulated_conv2d(
+        #     x=x,
+        #     weight=self.weight,
+        #     styles=torch.ones_like(styles), #!!!
+        #     demodulate=False, #!!! no demod?!
+        #     fused_modconv=fused_modconv,
+        # )
+        x = conv2d_resample.conv2d_resample(
             x=x,
-            weight=self.weight,
-            styles=styles,
-            demodulate=False,
-            fused_modconv=fused_modconv,
+            w=self.weight * self.weight_gain 
         )
+
         x = bias_act.bias_act(x, self.bias.to(x.dtype), clamp=self.conv_clamp)
         return x
 

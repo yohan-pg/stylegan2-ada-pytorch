@@ -13,11 +13,12 @@ class Variable(ToStyles, ABC, nn.Module):
         raise NotImplementedError
 
     @abstractmethod
-    def interpolate(self, other: "Variable", alpha: float) -> Styles:
+    def interpolate(self, other: "Variable", alpha: float) -> "Variable":
         raise NotImplementedError
 
     def copy(self):
-        return self.__class__(self.G[0], self.params.clone())
+        params = self.params.clone()
+        return self.__class__(self.G[0], nn.Parameter(params) if isinstance(params, nn.Parameter) else params)
 
     def to_image(self, const_noise: bool = True):
         return self.styles_to_image(self.to_styles(), const_noise)
@@ -102,7 +103,7 @@ class WConvexCombinationVariable(Variable):
 
         return var
 
-    def interpolate(self, other: "WConvexCombinationVariable", alpha: float) -> Styles:
+    def interpolate(self, other: "WConvexCombinationVariable", alpha: float) -> Variable:
         assert self.G == other.G
         return self.__class__(
             self.G[0],
@@ -135,32 +136,32 @@ class ZVariable(Variable):
             ),
         )
 
-    # def interpolate(self, other: "ZVariable", alpha: float) -> Styles:
-    #     assert self.G == other.G
-    #     # print("Warning: slerp not implemented! Using lerp.")
+    def interpolate(self, other: "ZVariable", alpha: float) -> Variable:
+        assert self.G == other.G
+        # print("Warning: slerp not implemented! Using lerp.")
 
-    #     # Spherical interpolation of a batch of vectors.
-    #     def slerp(a, b, t):
-    #         a = a / a.norm(dim=-1, keepdim=True)
-    #         b = b / b.norm(dim=-1, keepdim=True)
-    #         d = (a * b).sum(dim=-1, keepdim=True)
-    #         p = t * torch.acos(d)
-    #         c = b - d * a
-    #         c = c / c.norm(dim=-1, keepdim=True)
-    #         d = a * torch.cos(p) + c * torch.sin(p)
-    #         d = d / d.norm(dim=-1, keepdim=True)
-    #         return d
+        # Spherical interpolation of a batch of vectors.
+        def slerp(a, b, t):
+            a = a / a.norm(dim=-1, keepdim=True)
+            b = b / b.norm(dim=-1, keepdim=True)
+            d = (a * b).sum(dim=-1, keepdim=True)
+            p = t * torch.acos(d)
+            c = b - d * a
+            c = c / c.norm(dim=-1, keepdim=True)
+            d = a * torch.cos(p) + c * torch.sin(p)
+            d = d / d.norm(dim=-1, keepdim=True)
+            return d
 
-    #     return ZVariable(
-    #         self.G[0],
-    #         slerp(
-    #             self.params,
-    #             other.params,
-    #             alpha,
-    #         ),
-    #     )
+        return self.__class__(
+            self.G[0],
+            slerp(
+                self.params,
+                other.params,
+                alpha,
+            ),
+        )
 
-    interpolate = WVariable.interpolate
+    # interpolate = WVariable.interpolate
 
     def to_styles(self):
         # with torch.no_grad(): #?
@@ -200,6 +201,44 @@ class _InitializeAtMean:
     def to_styles(self) -> Styles:
         return super().to_styles()
 
+    # todo build up these stats for noise...
+    # w_std = (np.sum((w_samples - w_avg) ** 2) / num_samples) ** 0.5
+    # w_opt = torch.tensor(
+    #     torch.tensor(w_avg).repeat(1, G.num_ws, 1) if w_plus else w_avg,
+    #     dtype=torch.float32,
+    #     requires_grad=True,
+    # ).cuda()
+
+
+class ConstrainToMean(ToStyles):
+    def __init__(self, variable, tau):
+        super().__init__()
+        self.variable = variable
+        self.tau = tau
+    
+    def to_image(self, const_noise: bool = True):
+        return self.variable.styles_to_image(self.variable.to_styles(), const_noise)
+
+    def styles_to_image(self, styles, const_noise: bool = True):
+        return self.variable.styles_to_image(styles, const_noise)
+
+    def copy(self):
+        return ConstrainToMean(self.variable.copy(), self.tau)
+
+    def _project(self, G, styles):
+        avg = G.mapping.w_avg.reshape(1, 1, G.w_dim)
+        diff = styles - avg
+        norm = diff.norm(dim=2, keepdim=True)
+        
+        return avg + diff * self.tau
+
+    def to_styles(self) -> Styles:
+        return self._project(self.variable.G[0], self.variable.to_styles())
+    
+    def interpolate(self, other, alpha: float) -> Variable:
+        var = self.variable.interpolate(other.variable, alpha)
+        return ConstrainToMean(var, self.tau)
+    
     # todo build up these stats for noise...
     # w_std = (np.sum((w_samples - w_avg) ** 2) / num_samples) ** 0.5
     # w_opt = torch.tensor(
