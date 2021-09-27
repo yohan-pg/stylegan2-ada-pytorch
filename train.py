@@ -199,6 +199,18 @@ def setup_training_loop_kwargs(
             ramp=0.05,
             map=0, 
         ),  # Populated dynamically based on resolution and GPU count.
+        "auto1": dict(
+            ref_gpus=-1,
+            kimg=25000,
+            mb=-1,
+            mbstd=-1,
+            fmaps=-1,
+            lrate=-1,
+            gamma=-1,
+            ema=-1,
+            ramp=0.05,
+            map=1, 
+        ),  # Populated dynamically based on resolution and GPU count.
         "custom": dict(
             ref_gpus=-1,
             kimg=25000,
@@ -275,7 +287,7 @@ def setup_training_loop_kwargs(
 
     assert cfg in cfg_specs
     spec = dnnlib.EasyDict(cfg_specs[cfg])
-    if cfg in ["auto", "custom", "auto0"]:
+    if cfg in ["auto", "custom", "auto0", "auto1"]:
         desc += f"{gpus:d}"
         spec.ref_gpus = gpus
         res = args.training_set_kwargs.resolution
@@ -674,7 +686,7 @@ class CommaSeparatedList(click.ParamType):
     "--cfg",
     help="Base config [default: auto]",
     type=click.Choice(
-        ["auto", "stylegan2", "paper256", "paper512", "paper1024", "cifar", "custom", "auto0"]
+        ["auto", "stylegan2", "paper256", "paper512", "paper1024", "cifar", "custom", "auto0", "auto1"]
     ),
 )
 @click.option("--gamma", help="Override R1 gamma", type=float)

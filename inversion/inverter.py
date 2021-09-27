@@ -1,6 +1,7 @@
 from .prelude import *
 from .variables import *
 from .criterions import *
+from .jittering import *
 from .io import *
 
 import matplotlib.pyplot as plt
@@ -15,6 +16,7 @@ def invert(
     optimizer_constructor: Callable[[List[torch.Tensor]], torch.optim.Optimizer],
     snapshot_frequency: Optional[int],
     out_path: Optional[str],
+    constraints: List[OptimizationConstraint]
 ) -> "Inversion":
     # assert os.path.isfile(out_path) # todo
     directory = os.path.dirname(out_path)
@@ -26,16 +28,19 @@ def invert(
     losses = []
     preds = []
 
-    for i, (loss, pred) in enumerate(
-        inversion_loop(G, target, variable, criterion, optimizer_constructor, num_steps)
-    ):
-        if i % snapshot_frequency == 0:
-            variables.append(variable.copy())
-            losses.append(loss.item())
-            preds.append(pred)
+    try:
+        for i, (loss, pred) in enumerate(
+            inversion_loop(G, target, variable, criterion, optimizer_constructor, num_steps, constraints)
+        ):
+            if i % snapshot_frequency == 0:
+                variables.append(variable.copy())
+                losses.append(loss.item())
+                preds.append(pred)
 
-            if out_path is not None:  # todo clean up, move elsewhere
-                snapshot(pred, target, out_path)
+                if out_path is not None:  # todo clean up, move elsewhere
+                    snapshot(pred, target, out_path)
+    except KeyboardInterrupt:
+        pass
 
     return Inversion(target, variables, losses, preds)
 
@@ -48,22 +53,26 @@ def inversion_loop(
     criterion: InversionCriterion,
     optimizer_constructor: Callable[[List[torch.Tensor]], torch.optim.Optimizer],
     num_steps: int,
+    constraints: List[OptimizationConstraint]
 ) -> List[Tuple[torch.Tensor, torch.Tensor]]:
-    try:
+    
         optimizer = optimizer_constructor(variable.parameters())
 
         for step in tqdm.tqdm(range(num_steps + 1)):
-            t = step / num_steps  # todo pass this to reg and others
+            t = step / num_steps 
 
-            pred = (G.synthesis(variable.to_styles(), noise_mode="const") + 1) / 2
+            for constraint in constraints:
+                constraint.update(t)
+
+            styles = variable.to_styles()
+            styles = styles #+ 1 * torch.randn_like(styles) #!!
+            pred = variable.styles_to_image(styles)
             loss = criterion(pred, target)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
             yield loss, pred
-    except KeyboardInterrupt:
-        pass
 
 
 def snapshot(pred, target, out_path):

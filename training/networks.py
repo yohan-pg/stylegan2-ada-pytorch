@@ -17,7 +17,6 @@ from torch_utils.ops import fma
 import torch.nn.functional as F
 import math
 
-
 DISABLE_NOISE = True #!!!
 BAKE_CONVS = False
 
@@ -148,7 +147,7 @@ def modulated_conv2d(
                 w = w.reshape(B, O, I, Kw, Kw)
             else:
                 s = styles[:, : w.shape[1], : w.shape[2]].unsqueeze(3).unsqueeze(4)
-                k = 512
+                k = 32
                 w = w * s[:, 0:k, :].repeat(1, max(1, w.shape[1] // k), 1, 1, 1)
         else:
             w = w * styles.reshape(batch_size, 1, -1, 1, 1)  # [NOIkk]
@@ -203,6 +202,7 @@ def modulated_conv2d(
         flip_weight=flip_weight,
     )
     x = x.reshape(batch_size, -1, *x.shape[2:])
+    x = torch.nn.InstanceNorm2d(x.shape[1], affine=False)(x) #!!!
     if noise is not None:
         x = x.add_(noise)
     return x
@@ -330,7 +330,7 @@ class MappingNetwork(torch.nn.Module):
             layer = FullyConnectedLayer(
                 in_features,
                 out_features,
-                activation=activation,
+                activation="linear" if num_layers == 1 else activation,
                 lr_multiplier=lr_multiplier,  # (100 if sample_for_adaconv else 1)
                 orthogonal_init=orthogonal_init,
             )
@@ -399,7 +399,6 @@ class MappingNetwork(torch.nn.Module):
                 assert z.ndim == 3
                 assert z.shape[1] == num_vectors
                 assert z.shape[2] == self.z_dim
-
                 return (
                     self._forward(
                         z.reshape(z.shape[0] * num_vectors, self.z_dim), c, **kwargs
@@ -550,14 +549,19 @@ class ToRGBLayer(torch.nn.Module):
         else:
             styles = self.affine(w)
 
-        styles = styles * self.weight_gain #!!!breaks conv
-        x = modulated_conv2d(
+        # styles = styles * self.weight_gain 
+        # x = modulated_conv2d(
+        #     x=x,
+        #     weight=self.weight,
+        #     styles=torch.ones_like(styles), #!!!
+        #     demodulate=False, #!!! no demod?!
+        #     fused_modconv=fused_modconv,
+        # )
+        x = conv2d_resample.conv2d_resample(
             x=x,
-            weight=self.weight,
-            styles=styles,
-            demodulate=False,
-            fused_modconv=fused_modconv,
+            w=self.weight * self.weight_gain 
         )
+
         x = bias_act.bias_act(x, self.bias.to(x.dtype), clamp=self.conv_clamp)
         return x
 
@@ -786,10 +790,12 @@ class SynthesisNetwork(torch.nn.Module):
                 ws,
                 [
                     None,
-                    self.w_dim * self.num_ws if self.use_adaconv else self.num_ws,
+                    None if self.use_adaconv else self.num_ws,
                     self.w_dim,
                 ],
             )
+
+            num_required_vectors = ws.shape[1] // self.num_ws
             ws = ws.to(torch.float32)
             w_idx = 0
 
@@ -798,18 +804,22 @@ class SynthesisNetwork(torch.nn.Module):
                 block_ws.append(
                     ws.narrow(
                         1,
-                        w_idx * self.w_dim,
-                        (block.num_conv + block.num_torgb) * self.w_dim,
-                    ) #!!! double check
+                        w_idx * num_required_vectors,
+                        (block.num_conv + block.num_torgb) * num_required_vectors,
+                    ) 
                     if self.use_adaconv
                     else ws.narrow(1, w_idx, block.num_conv + block.num_torgb)
                 )
                 w_idx += block.num_conv
 
         x = img = None
+        
+        self.imgs = []
+
         for res, cur_ws in zip(self.block_resolutions, block_ws):
             block = getattr(self, f"b{res}")
             x, img = block(x, img, cur_ws, **block_kwargs)
+            self.imgs.append(img)
 
         return img
 

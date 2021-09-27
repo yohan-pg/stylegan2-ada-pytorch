@@ -20,7 +20,8 @@ from torch_utils import misc
 from torch_utils import training_stats
 from torch_utils.ops import conv2d_gradfix
 from torch_utils.ops import grid_sample_gradfix
-
+from torchvision.utils import save_image 
+from training.ops import *
 import legacy
 from metrics import metric_main
 
@@ -144,6 +145,7 @@ def training_loop(
     # Load training set.
     if rank == 0:
         print("Loading training set...")
+        
     training_set = dnnlib.util.construct_class_by_name(
         **training_set_kwargs
     )  # subclass of training.dataset.Dataset
@@ -319,6 +321,13 @@ def training_loop(
                 os.path.join(run_dir, "random_fakes_init.png"),
                 drange=[-1, 1],
                 grid_size=grid_size,
+            )
+            
+            mix_batch_size=8
+            save_image(
+                sample_mix(G, mix_batch_size), 
+                os.path.join(run_dir, "style_mixing.png"), 
+                nrow=mix_batch_size
             )
         
 
@@ -525,6 +534,30 @@ def training_loop(
                     os.path.join(run_dir, f"random_fakes{cur_nimg//1000:06d}.png"),
                     drange=[-1, 1],
                     grid_size=grid_size,
+                )
+
+                mix_batch_size=8
+                save_image(
+                    sample_mix(G, mix_batch_size), 
+                    os.path.join(run_dir, f"style_mixing{cur_nimg//1000:06d}.png"), 
+                    nrow=mix_batch_size
+                )
+
+                grid = torch.cat([torch.nn.functional.interpolate(img, size=G.synthesis.imgs[-1].shape[2:4]) for img in G.synthesis.imgs])
+                save_image(
+                    grid, 
+                    os.path.join(run_dir, f"torgb{cur_nimg//1000:06d}.png"), 
+                    nrow=len(G.synthesis.imgs[0])
+                )
+                save_image(
+                    grid.abs(), 
+                    os.path.join(run_dir, f"torgb_abs{cur_nimg//1000:06d}.png"), 
+                    nrow=len(G.synthesis.imgs[0])
+                )
+                save_image(
+                    -grid, 
+                    os.path.join(run_dir, f"torgb_neg{cur_nimg//1000:06d}.png"), 
+                    nrow=len(G.synthesis.imgs[0])
                 )
 
         # Save network snapshot.

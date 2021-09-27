@@ -1,18 +1,10 @@
 from inversion import *
 
-# todo slerp
-# todo clean up image/target image range
-# todo double check that VGG loss inputs are the right size and range and everything
-
-from torchvision.utils import save_image
-
-# todo adaconv
-
 METHOD = "adaconv"
 G_PATH = f"pretrained/alpha-{METHOD}-002600.pkl"
 OUT_DIR = f"out"
 RESOLUTION = 32
-LEARNING_RATE = 0.01
+LEARNING_RATE = 0.1
 
 def downsample(x):
     return F.interpolate(x, size=(RESOLUTION, RESOLUTION), mode="bilinear", align_corners=False)
@@ -21,9 +13,9 @@ if __name__ == "__main__":
     G = open_generator(G_PATH)
     D = open_discriminator(G_PATH)
 
-    variable = WVariableInitAtMean.sample_from(G)
-    optimizer = torch.optim.SGD(variable.parameters(), lr=LEARNING_RATE * 100)
-    # optimizer = torch.optim.LBFGS(variable.parameters(), lr=1.0, line_search_fn="strong_wolfe")
+    variable = WConvexCombinationVariable.sample_from(G)
+    # optimizer = torch.optim.Adam(variable.parameters(), lr=LEARNING_RATE)
+    optimizer = torch.optim.SGD(variable.parameters(), lr=LEARNING_RATE)
     
     criterion = VGGCriterion()
 
