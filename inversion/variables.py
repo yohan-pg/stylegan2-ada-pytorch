@@ -136,37 +136,55 @@ class ZVariable(Variable):
             ),
         )
 
-    def interpolate(self, other: "ZVariable", alpha: float) -> Variable:
-        assert self.G == other.G
-        # print("Warning: slerp not implemented! Using lerp.")
+    # def interpolate(self, other: "ZVariable", alpha: float) -> Variable:
+    #     assert self.G == other.G
+    #     # print("Warning: slerp not implemented! Using lerp.")
 
-        # Spherical interpolation of a batch of vectors.
-        def slerp(a, b, t):
-            a = a / a.norm(dim=-1, keepdim=True)
-            b = b / b.norm(dim=-1, keepdim=True)
-            d = (a * b).sum(dim=-1, keepdim=True)
-            p = t * torch.acos(d)
-            c = b - d * a
-            c = c / c.norm(dim=-1, keepdim=True)
-            d = a * torch.cos(p) + c * torch.sin(p)
-            d = d / d.norm(dim=-1, keepdim=True)
-            return d
+    #     # Spherical interpolation of a batch of vectors.
+    #     def slerp(a, b, t):
+    #         a = a / a.norm(dim=-1, keepdim=True)
+    #         b = b / b.norm(dim=-1, keepdim=True)
+    #         d = (a * b).sum(dim=-1, keepdim=True)
+    #         p = t * torch.acos(d)
+    #         c = b - d * a
+    #         c = c / c.norm(dim=-1, keepdim=True)
+    #         d = a * torch.cos(p) + c * torch.sin(p)
+    #         d = d / d.norm(dim=-1, keepdim=True)
+    #         return d
 
-        return self.__class__(
-            self.G[0],
-            slerp(
-                self.params,
-                other.params,
-                alpha,
-            ),
-        )
+    #     return self.__class__(
+    #         self.G[0],
+    #         slerp(
+    #             self.params,
+    #             other.params,
+    #             alpha,
+    #         ),
+    #     )
 
-    # interpolate = WVariable.interpolate
+    interpolate = WVariable.interpolate
 
     def to_styles(self):
         # with torch.no_grad(): #?
         #     self.params.copy_(normalize_2nd_moment(self.params, dim=2))
-        return self.G[0].mapping(self.params, None)
+        return self.G[0].mapping(self.params, None) 
+
+
+class YVariable(Variable):
+    @classmethod
+    def sample_from(cls, G: nn.Module, batch_size: int = 1):
+        return YVariable(
+            G,
+            nn.Parameter(
+                (
+                    torch.zeros(batch_size, G.num_required_vectors(), G.z_dim).cuda()
+                ).squeeze(1)
+            ),
+        )
+
+    interpolate = ZVariable.interpolate
+
+    def to_styles(self):
+        return self.params.repeat(1, self.G[0].num_ws, 1)
 
 
 class PlusVariable(ABC):
@@ -251,6 +269,20 @@ class ConstrainToMean(ToStyles):
 class WVariableInitAtMean(_InitializeAtMean, WVariable):
     pass
 
+
+class WVariableInitAtMeanTruncated(WVariableInitAtMean):
+
+    # interpolate = ZVariable.interpolate
+    
+    def to_styles(self) -> Styles:
+        styles = super().to_styles()
+        # todo review that shapes work out (no broadcasting bug)
+        # return normalize_2nd_moment(styles)
+        w_avg = self.G[0].mapping.w_avg
+        # styles = w_avg.lerp(styles, 0.1) #!!
+        styles = styles / ((styles - w_avg).norm(dim=2, keepdim=True) + 1) * 10
+        print((styles - w_avg).norm(dim=2).mean())
+        return styles
 
 class WPlusVariableInitAtMean(PlusVariable, _InitializeAtMean, WVariable):
     pass
