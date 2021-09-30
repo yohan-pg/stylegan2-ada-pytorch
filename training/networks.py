@@ -158,11 +158,9 @@ def modulated_conv2d(
 
     # Execute by scaling the activations before and after the convolution.
     if not fused_modconv:
-        raise NotImplementedError
         if styles.ndim == 3:
-            S = (styles[:, :x.shape[1], :x.shape[1]] - 1) / math.sqrt(512) 
-            # + torch.eye(x.shape[1]).unsqueeze(0).to(styles.device) / math.sqrt(2)
-            # S = S * (S.square().sum(dim=[2], keepdim=True) + 1e-8).rsqrt() #!! no normalization
+            S = styles[:, :x.shape[1], :x.shape[1]] - 1
+            # S = S * (S.square().sum(dim=[2], keepdim=True) + 1e-8).rsqrt()
             x = (S @ x.reshape(-1, x.shape[1], x.shape[2] * x.shape[3])).reshape(x.shape)
         else:
             x = x * styles.to(x.dtype).reshape(batch_size, -1, 1, 1)
@@ -202,7 +200,6 @@ def modulated_conv2d(
         flip_weight=flip_weight,
     )
     x = x.reshape(batch_size, -1, *x.shape[2:])
-    x = torch.nn.InstanceNorm2d(x.shape[1], affine=False)(x) #!!!
     if noise is not None:
         x = x.add_(noise)
     return x
@@ -331,7 +328,7 @@ class MappingNetwork(torch.nn.Module):
                 in_features,
                 out_features,
                 activation="linear" if num_layers == 1 else activation,
-                lr_multiplier=lr_multiplier,  # (100 if sample_for_adaconv else 1)
+                lr_multiplier=lr_multiplier, # (100 if sample_for_adaconv else 1)
                 orthogonal_init=orthogonal_init,
             )
             setattr(self, f"fc{idx}", layer)
@@ -352,7 +349,7 @@ class MappingNetwork(torch.nn.Module):
                 misc.assert_shape(c, [None, self.c_dim])
                 y = normalize_2nd_moment(self.embed(c.to(torch.float32)))
                 x = torch.cat([x, y], dim=1) if x is not None else y
-
+        
         # Main layers.
         for idx in range(self.num_layers):
             layer = getattr(self, f"fc{idx}")
@@ -382,6 +379,9 @@ class MappingNetwork(torch.nn.Module):
         return (self.num_ws if self.sample_w_plus else 1) * (
             self.num_adaconv_vectors if self.sample_for_adaconv else 1
         )
+
+    def num_vectors_per_adain(self):
+        return self.num_adaconv_vectors if self.sample_for_adaconv else 1
 
     def forward(self, z, c, **kwargs):
         assert self.num_ws is not None
@@ -557,8 +557,9 @@ class ToRGBLayer(torch.nn.Module):
         #     demodulate=False, #!!! no demod?!
         #     fused_modconv=fused_modconv,
         # )
+        
         x = conv2d_resample.conv2d_resample(
-            x=x,
+            x=x.to(self.weight.dtype),
             w=self.weight * self.weight_gain 
         )
 
@@ -658,6 +659,8 @@ class SynthesisBlock(torch.nn.Module):
                 channels_last=self.channels_last,
             )
 
+        self.stats = []
+
     def forward(self, x, img, ws, force_fp32=False, fused_modconv=None, **layer_kwargs):
         if self.use_adaconv:
             misc.assert_shape(
@@ -694,7 +697,9 @@ class SynthesisBlock(torch.nn.Module):
                 x, [None, self.in_channels, self.resolution // 2, self.resolution // 2]
             )
             x = x.to(dtype=dtype, memory_format=memory_format)
-
+        
+        self.stats = []
+        
         # Main layers.
         if self.in_channels == 0:
             x = self.conv1(x, next(w_iter), fused_modconv=fused_modconv, **layer_kwargs)
@@ -711,7 +716,9 @@ class SynthesisBlock(torch.nn.Module):
             x = y.add_(x)
         else:
             x = self.conv0(x, next(w_iter), fused_modconv=fused_modconv, **layer_kwargs)
+            self.stats.append((x.mean().item(), x.std().item()))
             x = self.conv1(x, next(w_iter), fused_modconv=fused_modconv, **layer_kwargs)
+        self.stats.append((x.mean().item(), x.std().item()))
 
         # ToRGB.
         if img is not None:
@@ -761,6 +768,8 @@ class SynthesisNetwork(torch.nn.Module):
         fp16_resolution = max(2 ** (self.img_resolution_log2 + 1 - num_fp16_res), 8)
         self.use_adaconv = block_kwargs["use_adaconv"]
 
+        self.blocks = []
+
         self.num_ws = 0
         for res in self.block_resolutions:
             in_channels = channels_dict[res // 2] if res > 4 else 0
@@ -781,6 +790,7 @@ class SynthesisNetwork(torch.nn.Module):
             if is_last:
                 self.num_ws += block.num_torgb
             setattr(self, f"b{res}", block)
+            self.blocks.append(block)
 
     def forward(self, ws, **block_kwargs):
         block_ws = []

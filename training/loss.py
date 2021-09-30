@@ -60,7 +60,7 @@ class StyleGAN2Loss(Loss):
         # *** Style mixing
         if self.style_mixing_prob > 0:
             with torch.autograd.profiler.record_function("style_mixing"):
-                num_vecs = self.G_mapping.module.num_required_vectors() if isinstance(self.G_mapping, torch.nn.parallel.DistributedDataParallel) else self.G_mapping.num_required_vectors()
+                num_vecs = self.G_mapping.module.num_vectors_per_adain() if isinstance(self.G_mapping, torch.nn.parallel.DistributedDataParallel) else self.G_mapping.num_vectors_per_adain()
                 num_injection_points = self.G_mapping.num_ws
                 cutoff = torch.empty([], dtype=torch.int64, device=ws.device).random_(
                     1, num_injection_points
