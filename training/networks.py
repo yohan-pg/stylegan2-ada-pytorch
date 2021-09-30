@@ -297,6 +297,7 @@ class MappingNetwork(torch.nn.Module):
         sample_for_adaconv=False,
         num_adaconv_vectors=0,
         orthogonal_init=False,
+        normalize=False #!!!
     ):
         super().__init__()
         self.z_dim = z_dim
@@ -308,6 +309,7 @@ class MappingNetwork(torch.nn.Module):
         self.sample_w_plus = sample_w_plus
         self.sample_for_adaconv = sample_for_adaconv
         self.num_adaconv_vectors = num_adaconv_vectors
+        self.normalize = normalize
 
         if embed_features is None:
             embed_features = w_dim
@@ -339,15 +341,23 @@ class MappingNetwork(torch.nn.Module):
     def _forward(
         self, z, c, truncation_psi=1, truncation_cutoff=None, skip_w_avg_update=False
     ):
+        #!!! dicarding everything but the first few
+        z = z.clone()
+        z[:, 32:] = 0.0
+
         # Embed, normalize, and concat inputs.
         x = None
         with torch.autograd.profiler.record_function("input"):
             if self.z_dim > 0:
                 misc.assert_shape(z, [None, self.z_dim])
-                x = normalize_2nd_moment(z.to(torch.float32))
+                x = z.to(torch.float32)
+                if self.normalize:
+                    x = normalize_2nd_moment(x)
             if self.c_dim > 0:
                 misc.assert_shape(c, [None, self.c_dim])
-                y = normalize_2nd_moment(self.embed(c.to(torch.float32)))
+                x = z.to(torch.float32)
+                if self.normalize:
+                    x = normalize_2nd_moment(x)
                 x = torch.cat([x, y], dim=1) if x is not None else y
         
         # Main layers.
