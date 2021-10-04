@@ -48,7 +48,6 @@ def invert(
 def inversion_loop(
     G,
     target: ImageTensor,
-    # [C,H,W] and dynamic range [0,255], W & H must match G output resolution
     variable: Variable,
     criterion: InversionCriterion,
     optimizer_constructor: Callable[[List[torch.Tensor]], torch.optim.Optimizer],
@@ -68,12 +67,12 @@ def inversion_loop(
             styles = styles #+ 1 * torch.randn_like(styles) #!!
             pred = variable.styles_to_image(styles)
             loss = criterion(pred, target)
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
 
             yield loss, pred
 
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
 
 def snapshot(pred, target, out_path):
     save_image(torch.cat((target, pred, (target - pred).abs())), out_path)

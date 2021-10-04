@@ -11,7 +11,6 @@
 from inversion import *
 import shutil
 
-# todo try PULSE-like spherical optimization
 # todo bring back jittering
 # todo bring back lr schedule
 # todo try joint optimization -> minimize distance?
@@ -22,18 +21,22 @@ import shutil
 # ? try training on 256 so the VGG loss looks right
 # ? eventually bring back noise + noise optim
 
-G_PATH = f"training-runs/style_size_32_no_norm/00002-afhq64cat-auto1-gamma10-kimg5000-batch8/network-snapshot-000200.pkl"
-OUT_DIR = f"out/inversion"
+METHOD = "adaconv"
+G_PATH = f"pretrained/adaconv-linear-mapper.pkl"
 
-NUM_STEPS = 1_000
+NUM_STEPS = 50
 SEQUENTIAL = False
-# VARIABLE_TYPE = ZVariableInitAtMean if METHOD == "adaconv" else WPlusVariableInitAtMean
-VARIABLE_TYPE = ZVariable
+VARIABLE_TYPE = WVariableInitAtMean if METHOD == "adaconv" else WPlusVariableInitAtMean
 CRITERION_TYPE = VGGCriterion
-SNAPSHOT_FREQ = 20
+SNAPSHOT_FREQ = 5
 OPTIMIZER_CTOR = lambda params: torch.optim.Adam(
-    params, lr=0.05, betas=(0.0, 0.0) #!!!
-) #!!!
+    params, lr=0.05
+) 
+# OPTIMIZER_CTOR = lambda params: torch.optim.Adam(
+#     params, lr=0.1
+# ) 
+
+OUT_DIR = f"out/inversion"
 
 AIM_FOR_FAKE_A = False
 AIM_FOR_FAKE_B = False
@@ -44,7 +47,7 @@ TARGET_B_PATH = "./datasets/samples/cats/00000/img00000003.png"
 # TARGET_A_PATH = "./datasets/samples/churches/a.webp"
 # TARGET_B_PATH = "./datasets/samples/churches/c.webp"
 
-SEED = 11
+SEED = 12
 
 if __name__ == "__main__":
     shutil.rmtree(OUT_DIR, ignore_errors=True)

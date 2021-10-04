@@ -204,29 +204,6 @@ class ZPlusVariable(PlusVariable, ZVariable):
     pass
 
 
-class _InitializeAtMean:
-    @classmethod
-    def sample_from(
-        cls, G: nn.Module, num_samples: int = 1000, batch_size: int = 10
-    ):  #! can't parameterize this
-        return cls(
-                G,
-                nn.Parameter(G.mapping.w_avg.reshape(1, 1, G.w_dim).repeat(
-                    1, G.num_required_vectors(), 1
-                )),
-            )
-
-    def to_styles(self) -> Styles:
-        return super().to_styles()
-
-    # todo build up these stats for noise...
-    # w_std = (np.sum((w_samples - w_avg) ** 2) / num_samples) ** 0.5
-    # w_opt = torch.tensor(
-    #     torch.tensor(w_avg).repeat(1, G.num_ws, 1) if w_plus else w_avg,
-    #     dtype=torch.float32,
-    #     requires_grad=True,
-    # ).cuda()
-
 
 class ConstrainToMean(ToStyles):
     def __init__(self, variable, tau):
@@ -266,8 +243,37 @@ class ConstrainToMean(ToStyles):
     # ).cuda()
 
 
-class WVariableInitAtMean(_InitializeAtMean, WVariable):
-    pass
+# todo build up these stats for noise...
+# w_std = (np.sum((w_samples - w_avg) ** 2) / num_samples) ** 0.5
+# w_opt = torch.tensor(
+#     torch.tensor(w_avg).repeat(1, G.num_ws, 1) if w_plus else w_avg,
+#     dtype=torch.float32,
+#     requires_grad=True,
+# ).cuda()
+
+
+class WVariableInitAtMean(WVariable):
+    @classmethod
+    def sample_from(
+        cls, G: nn.Module, batch_size: int = 1
+    ):  
+        return cls(
+            G,
+            nn.Parameter(G.mapping.w_avg.reshape(1, 1, G.w_dim).repeat(
+                1, G.num_required_vectors(), 1
+            )),
+        )
+
+
+class ZVariableInitAtMean(WVariable):
+    @classmethod
+    def sample_from(
+        cls, G: nn.Module, batch_size: int = 1
+    ):  
+        return cls(
+            G,
+            nn.Parameter(ZVariable.sample_from(G, batch_size).params * 0),
+        )
 
 
 class WVariableInitAtMeanTruncated(WVariableInitAtMean):
@@ -284,6 +290,6 @@ class WVariableInitAtMeanTruncated(WVariableInitAtMean):
         print((styles - w_avg).norm(dim=2).mean())
         return styles
 
-class WPlusVariableInitAtMean(PlusVariable, _InitializeAtMean, WVariable):
+class WPlusVariableInitAtMean(PlusVariable, WVariableInitAtMean):
     pass
 

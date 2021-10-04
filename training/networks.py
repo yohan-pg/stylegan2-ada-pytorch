@@ -131,6 +131,7 @@ def modulated_conv2d(
             Kw = w.shape[3]
 
             if BAKE_CONVS:
+                raise NotImplementedError
                 s = styles[:, :I, :I].unsqueeze(3).unsqueeze(4)
 
                 def compose_convs(w1, w2):
@@ -147,7 +148,7 @@ def modulated_conv2d(
                 w = w.reshape(B, O, I, Kw, Kw)
             else:
                 s = styles[:, : w.shape[1], : w.shape[2]].unsqueeze(3).unsqueeze(4)
-                k = 32
+                k = 512
                 w = w * s[:, 0:k, :].repeat(1, max(1, w.shape[1] // k), 1, 1, 1)
         else:
             w = w * styles.reshape(batch_size, 1, -1, 1, 1)  # [NOIkk]
@@ -343,10 +344,8 @@ class MappingNetwork(torch.nn.Module):
     def _forward(
         self, z, c, truncation_psi=1, truncation_cutoff=None, skip_w_avg_update=False
     ):
-        #!!! dicarding everything but the first few
         z = z.clone()
-        z[:, 32:] = 0.0
-
+ 
         # Embed, normalize, and concat inputs.
         x = None
         with torch.autograd.profiler.record_function("input"):
@@ -361,6 +360,10 @@ class MappingNetwork(torch.nn.Module):
                 if self.normalize:
                     x = normalize_2nd_moment(x)
                 x = torch.cat([x, y], dim=1) if x is not None else y
+
+        #!!!
+        if self.sample_for_adaconv:
+            x = x / math.sqrt(self.num_required_vectors())
 
         # Main layers.
         for idx in range(self.num_layers):
@@ -467,6 +470,7 @@ class SynthesisLayer(torch.nn.Module):
         if self.use_noise:
             self.register_buffer("noise_const", torch.randn([resolution, resolution]))
             self.noise_strength = torch.nn.Parameter(torch.zeros([]))
+
         self.bias = torch.nn.Parameter(torch.zeros([out_channels]))
 
     def forward(self, x, w, noise_mode="random", fused_modconv=True, gain=1):
@@ -474,7 +478,7 @@ class SynthesisLayer(torch.nn.Module):
         in_resolution = self.resolution // self.up
         misc.assert_shape(x, [None, self.weight.shape[1], in_resolution, in_resolution])
 
-        if self.use_adaconv:
+        if self.use_adaconv: 
             styles = self.affine(w.reshape(-1, self.w_dim)).reshape(
                 w.shape[0], w.shape[1], self.in_channels
             )
@@ -537,7 +541,7 @@ class ToRGBLayer(torch.nn.Module):
         self.w_dim = w_dim
         self.in_channels = in_channels
         self.out_channels = out_channels
-        self.affine = FullyConnectedLayer(w_dim, in_channels, bias_init=1)
+        # self.affine = FullyConnectedLayer(w_dim, in_channels, bias_init=1)
         memory_format = (
             torch.channels_last if channels_last else torch.contiguous_format
         )
@@ -551,12 +555,12 @@ class ToRGBLayer(torch.nn.Module):
         self.use_adaconv = use_adaconv
 
     def forward(self, x, w, fused_modconv=True):
-        if self.use_adaconv:
-            styles = self.affine(w.reshape(-1, self.w_dim)).reshape(
-                w.shape[0], w.shape[1], self.in_channels
-            )
-        else:
-            styles = self.affine(w)
+        # if self.use_adaconv:
+        #     styles = self.affine(w.reshape(-1, self.w_dim)).reshape(
+        #         w.shape[0], w.shape[1], self.in_channels
+        #     )
+        # else:
+        #     styles = self.affine(w)
 
         # styles = styles * self.weight_gain 
         # x = modulated_conv2d(
@@ -1136,6 +1140,7 @@ class DiscriminatorEpilogue(torch.nn.Module):
             x = (x * cmap).sum(dim=1, keepdim=True) * (1 / np.sqrt(self.cmap_dim))
 
         assert x.dtype == dtype
+        
         return x
 
 
@@ -1216,7 +1221,7 @@ class Discriminator(torch.nn.Module):
             **common_kwargs,
         )
 
-    def forward(self, img, c, **block_kwargs):
+    def _forward(self, img, c, **block_kwargs):
         x = None
         for res in self.block_resolutions:
             block = getattr(self, f"b{res}")
@@ -1228,5 +1233,19 @@ class Discriminator(torch.nn.Module):
         x = self.b4(x, img, cmap)
         return x
 
+    def forward(self, img, *args, **kwargs):
+        return normalize_gradient(self._forward, img, *args, **kwargs)
+
+def normalize_gradient(net_D, x, *args, **kwargs):
+    "Taken from: https://github.com/basiclab/GNGAN-PyTorch/blob/master/models/gradnorm.py"
+    x.requires_grad_(True) 
+    f = net_D(x, *args, **kwargs) 
+    grad = torch.autograd.grad(
+        f, [x], torch.ones_like(f), create_graph=True, retain_graph=True 
+    )[0]
+    grad_norm = torch.norm(torch.flatten(grad, start_dim=1), p=2, dim=1)
+    grad_norm = grad_norm.view(-1, *[1 for _ in range(len(f.shape) - 1)])
+    f_hat = f / (grad_norm + torch.abs(f) + 1e-8)
+    return f_hat
 
 # ----------------------------------------------------------------------------
