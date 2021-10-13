@@ -50,7 +50,7 @@ def project(
     schedule_lr=True,
     add_noise_to_w=True, 
     w_plus=False,
-    optimize_on_z=True,
+    optimize_on_z=False,
     outdir=None,
 ):
     assert target.shape == (G.img_channels, G.img_resolution, G.img_resolution)

@@ -9,7 +9,7 @@ class WVariable(Variable):
     init_at_mean = True
 
     @classmethod
-    def sample_from(cls, G: nn.Module, batch_size: int = 1):
+    def sample_from(cls, G: nn.Module, batch_size: int = 1, avg_samples=2_000):
         if cls.init_at_mean:
             data = G.mapping(
                 (
@@ -20,6 +20,17 @@ class WVariable(Variable):
                 None,
                 skip_w_avg_update=True,
             )[:, : G.num_required_vectors(), :]
+            with torch.no_grad():
+                # * Updates G.mapping.w_avg with a large number of samples
+                temp_beta = G.mapping.w_avg_beta
+                temp_adaconv = G.mapping.sample_for_adaconv
+
+                G.mapping.sample_for_adaconv = False
+                G.mapping.w_avg_beta = 0.0
+                G.mapping(torch.randn(avg_samples, G.z_dim).cuda(), None)
+
+                G.mapping.w_avg_beta = temp_beta
+                G.mapping.sample_for_adaconv = temp_adaconv
         else:
             data = G.mapping(
                 (
@@ -30,6 +41,7 @@ class WVariable(Variable):
                 None,
                 skip_w_avg_update=True,
             )[:, : G.num_required_vectors(), :]
+            mean = None
 
         return cls(
             G,
@@ -42,14 +54,14 @@ class WVariable(Variable):
 
     def to_styles(self) -> Styles:
         data = self.data
-        
+
         if self.init_at_mean:
             G = self.G[0]
             mean = G.mapping.w_avg.reshape(1, 1, G.w_dim).repeat(
                 len(data), G.num_required_vectors(), 1
             )
-            data = (data + mean)
-        
+            data = data + mean
+
         return data.repeat(1, self.G[0].num_ws, 1)
 
 
@@ -57,8 +69,9 @@ class WVariableWithNoise(WVariable):
     noise_gain = 0.1
 
     def to_styles(self) -> Styles:
-        return (self.data + torch.randn_like(self.data) * self.noise_gain).repeat(1, self.G[0].num_ws, 1)
-
+        return (self.data + torch.randn_like(self.data) * self.noise_gain).repeat(
+            1, self.G[0].num_ws, 1
+        )
 
 
 class WVariableEarlyLayers(WVariable):
@@ -66,12 +79,14 @@ class WVariableEarlyLayers(WVariable):
 
     def to_styles(self) -> Styles:
         styles = super().to_styles()
-        mean = WVariable.sample_from(self.G[0], len(self.data)).data.repeat(1, self.G[0].num_ws, 1)
-        
-        return torch.cat((
-            styles[:, :512 * self.num_layers],
-            mean[:, 512 * self.num_layers:]
-        ), dim=1)
+        mean = WVariable.sample_from(self.G[0], len(self.data)).data.repeat(
+            1, self.G[0].num_ws, 1
+        )
+
+        return torch.cat(
+            (styles[:, : 512 * self.num_layers], mean[:, 512 * self.num_layers :]),
+            dim=1,
+        )
 
 
 class WVariableLastLayers(WVariable):
@@ -79,9 +94,11 @@ class WVariableLastLayers(WVariable):
 
     def to_styles(self) -> Styles:
         styles = super().to_styles()
-        mean = WVariable.sample_from(self.G[0], len(self.data)).data.repeat(1, self.G[0].num_ws, 1)
-        
-        return torch.cat((
-            mean[:, :512 * self.num_layers],
-            styles[:, 512 * self.num_layers:]
-        ), dim=1)
+        mean = WVariable.sample_from(self.G[0], len(self.data)).data.repeat(
+            1, self.G[0].num_ws, 1
+        )
+
+        return torch.cat(
+            (mean[:, : 512 * self.num_layers], styles[:, 512 * self.num_layers :]),
+            dim=1,
+        )
