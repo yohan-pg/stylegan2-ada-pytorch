@@ -5,7 +5,7 @@ from time import perf_counter
 
 import tqdm
 import click
-import imageio
+# import imageio
 import numpy as np
 import PIL.Image
 import torch
