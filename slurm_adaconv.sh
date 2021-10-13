@@ -4,17 +4,15 @@
 #SBATCH --cpus-per-task=8    # CPU cores/threads
 #SBATCH --mem=32000M         # memory per node
 #SBATCH --time=3-00:00       # time (DD-HH:MM)
-#SBATCH --job-name=adaconv_no_noise_8_vectors 
+#SBATCH --job-name=adaconv 
 
 source .activate
 
 data
 nvidia-smi
 
-python train.py \
-    --kimg 25000 \
-    --data=./datasets/afhq128cat.zip \
-    --metrics=fid50k,pr50k3,ppl2_wend \
+bash train.sh \
     --use_adaconv True \
-    --outdir="./training-runs/adaconv_no_noise_8_vectors" \
+    --gpus 1 \
+    --outdir="./training-runs/adaconv" \
     "${@}"
