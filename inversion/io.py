@@ -70,7 +70,8 @@ def open_target(G, path: str):
 
 @torch.no_grad()
 def sample_image(G, batch_size: int = 1):
-    return (G.synthesis(ZVariable.sample_from(G, batch_size).to_styles()) + 1) / 2
+    var = ZVariable.sample_from(G, batch_size)
+    return (G.synthesis(var.to_styles()) + 1) / 2
 
 
 def save_frame(G, outdir: str, target_uint8: list, projected_w_steps: list):
@@ -85,3 +86,12 @@ def save_frame(G, outdir: str, target_uint8: list, projected_w_steps: list):
     PIL.Image.fromarray(synth_image, "RGB").save(f"{outdir}/proj.png")
     np.savez(f"{outdir}/projected_w.npz", w=projected_w.unsqueeze(0).cpu().numpy())
     return outdir
+
+
+def latest_snapshot(name: str) -> Optional[str]:
+    run_path = sorted(os.listdir(f"training-runs/{name}"))[-1]
+    snapshot_path = sorted([
+        path for path in os.listdir(f"training-runs/{name}/{run_path}")
+        if path.startswith("network-snapshot")
+    ])[-1]
+    return f"training-runs/{name}/{run_path}/{snapshot_path}"

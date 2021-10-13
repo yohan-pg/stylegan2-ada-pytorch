@@ -18,7 +18,7 @@ class StyleJittering(OptimizationConstraint):
             * self.initial_noise_factor
             * max(0.0, 1.0 - t / self.noise_ramp_length) ** 2
         )
-        w_noise = torch.randn_like(w) * w_noise_scale
+        # w_noise = torch.randn_like(w) * w_noise_scale
 
     def to_styles(self):
         # todo, should this be before replication?
@@ -63,3 +63,14 @@ class NoiseJittering(OptimizationConstraint):
         #     for buf in noise_bufs.values():
         #         buf -= buf.mean()
         #         buf *= buf.square().mean().rsqrt()
+
+
+
+
+# todo build up these stats for noise...
+# w_std = (np.sum((w_samples - w_avg) ** 2) / num_samples) ** 0.5
+# w_opt = torch.tensor(
+#     torch.tensor(w_avg).repeat(1, G.num_ws, 1) if w_plus else w_avg,
+#     dtype=torch.float32,
+#     requires_grad=True,
+# ).cuda()

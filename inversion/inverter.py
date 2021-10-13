@@ -16,7 +16,8 @@ def invert(
     optimizer_constructor: Callable[[List[torch.Tensor]], torch.optim.Optimizer],
     snapshot_frequency: Optional[int],
     out_path: Optional[str],
-    constraints: List[OptimizationConstraint]
+    constraints: List[OptimizationConstraint],
+    fine_tune_G: bool = False
 ) -> "Inversion":
     # assert os.path.isfile(out_path) # todo
     directory = os.path.dirname(out_path)
@@ -30,13 +31,13 @@ def invert(
 
     try:
         for i, (loss, pred) in enumerate(
-            inversion_loop(G, target, variable, criterion, optimizer_constructor, num_steps, constraints)
+            inversion_loop(G, target, variable, criterion, optimizer_constructor, num_steps, constraints, fine_tune_G)
         ):
+            losses.append(loss.item())
+
             if i % snapshot_frequency == 0:
                 variables.append(variable.copy())
-                losses.append(loss.item())
                 preds.append(pred)
-
                 if out_path is not None:  # todo clean up, move elsewhere
                     snapshot(pred, target, out_path)
     except KeyboardInterrupt:
@@ -46,16 +47,16 @@ def invert(
 
 
 def inversion_loop(
-    G,
+    G, 
     target: ImageTensor,
     variable: Variable,
     criterion: InversionCriterion,
     optimizer_constructor: Callable[[List[torch.Tensor]], torch.optim.Optimizer],
     num_steps: int,
-    constraints: List[OptimizationConstraint]
+    constraints: List[OptimizationConstraint], 
+    fine_tune_G: bool
 ) -> List[Tuple[torch.Tensor, torch.Tensor]]:
-    
-        optimizer = optimizer_constructor(variable.parameters())
+        optimizer = optimizer_constructor(list(variable.parameters()) + (list(G.synthesis.parameters()) if fine_tune_G else []))
 
         for step in tqdm.tqdm(range(num_steps + 1)):
             t = step / num_steps 
@@ -64,15 +65,15 @@ def inversion_loop(
                 constraint.update(t)
 
             styles = variable.to_styles()
-            styles = styles #+ 1 * torch.randn_like(styles) #!!
+            styles = styles
             pred = variable.styles_to_image(styles)
             loss = criterion(pred, target)
-
-            yield loss, pred
-
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+
+            yield loss, pred
+
 
 def snapshot(pred, target, out_path):
     save_image(torch.cat((target, pred, (target - pred).abs())), out_path)
@@ -90,12 +91,24 @@ class Inversion:
         self.target = target
         self.losses = losses
         self.preds = preds
+        
+        for var in self.variables:
+            var.eval()
 
         self.final_variable = self.variables[-1]
 
-    def save_losses_plot(self, out_path: str) -> None:
+    @staticmethod
+    def save_losses_plot(inversions: List["Inversion"], out_path: str) -> None:
         plt.figure()
-        plt.plot(self.losses)
+        plt.title("Reconstruction loss per step")
+        
+        for name, inversion in reversed(inversions.items()):
+            plt.plot(inversion.losses, label=name)
+        plt.legend()
+
+        plt.ylim(0, 0.5)
+        plt.xlabel("Optimization steps")
+        plt.ylabel("Reconstruction loss")
         plt.savefig(out_path)
 
     def save_optim_trace(self, out_path: str) -> None:

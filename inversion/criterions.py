@@ -20,13 +20,17 @@ class VGGCriterion(InversionCriterion):
     def extract_features(self, x):
         "Expects an image with values between 0.0 and 1.0"
         if x.shape[2] > 256:
-            x = F.interpolate(x, size=(256, 256), mode="area", align_corners=False)
+            x = F.interpolate(x, size=(256, 256), mode="area", align_corners=False) #!! review this
 
         return self.vgg16(
             x.clone() * 255, resize_images=False, return_lpips=True
         )
 
     def forward(self, pred: ImageTensor, target: ImageTensor):
+        # print(
+        #     (round(pred.min().item(), 4), round(pred.max().item(), 4)), 
+        #     (round(target.min().item(), 4), round(target.max().item(), 4))
+        # )
         return (
-            (self.extract_features(pred) - self.extract_features(target)).square().sum()
+            (self.extract_features(pred) - self.extract_features(target)).square().sum() 
         )  #!? sum not mean?

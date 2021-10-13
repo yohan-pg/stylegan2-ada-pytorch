@@ -211,6 +211,7 @@ def setup_training_loop_kwargs(
             ramp=0.05,
             map=1, 
         ),  # Populated dynamically based on resolution and GPU count.
+
         "custom": dict(
             ref_gpus=-1,
             kimg=25000,
@@ -234,6 +235,18 @@ def setup_training_loop_kwargs(
             ema=10,
             ramp=None,
             map=8,
+        ),  # Uses 
+        "stylegan2map2": dict(
+            ref_gpus=8,
+            kimg=25000,
+            mb=32,
+            mbstd=4,
+            fmaps=1,
+            lrate=0.002,
+            gamma=10,
+            ema=10,
+            ramp=None,
+            map=2,
         ),  # Uses mixed-precision, unlike the original StyleGAN2.
         "paper256": dict(
             ref_gpus=8,
@@ -686,7 +699,7 @@ class CommaSeparatedList(click.ParamType):
     "--cfg",
     help="Base config [default: auto]",
     type=click.Choice(
-        ["auto", "stylegan2", "paper256", "paper512", "paper1024", "cifar", "custom", "auto0", "auto1"]
+        ["auto", "stylegan2", "stylegan2map2", "paper256", "paper512", "paper1024", "cifar", "custom", "auto0", "auto1", "auto2"]
     ),
 )
 @click.option("--gamma", help="Override R1 gamma", type=float)
