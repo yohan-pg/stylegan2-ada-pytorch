@@ -11,9 +11,9 @@
 from inversion import *
 import shutil
 
+# todo try PULSE-like spherical optimization
 # todo bring back jittering
 # todo bring back lr schedule
-# todo try PULSE-like spherical optimization
 # todo try joint optimization -> minimize distance?
 
 # ? try adaconv 3x3?
@@ -22,13 +22,9 @@ import shutil
 # ? try training on 256 so the VGG loss looks right
 # ? eventually bring back noise + noise optim
 
-# METHOD = "adaconv"
-# G_PATH = f"pretrained/{METHOD}-church128-001600.pkl"
+G_PATH = f"training-runs/style_size_32_no_norm/00002-afhq64cat-auto1-gamma10-kimg5000-batch8/network-snapshot-000200.pkl"
+OUT_DIR = f"out/inversion"
 
-METHOD = "adaconv"
-G_PATH = "training-runs/linear_mapper_adaconv/00000-church64-auto01-gamma100-kimg5000-batch8/network-snapshot-000200.pkl"
-
-OUT_DIR = f"out/{METHOD}-church"
 NUM_STEPS = 1_000
 SEQUENTIAL = False
 # VARIABLE_TYPE = ZVariableInitAtMean if METHOD == "adaconv" else WPlusVariableInitAtMean
@@ -36,12 +32,18 @@ VARIABLE_TYPE = ZVariable
 CRITERION_TYPE = VGGCriterion
 SNAPSHOT_FREQ = 20
 OPTIMIZER_CTOR = lambda params: torch.optim.Adam(
-    params, lr=0.05, betas=(0.0, 0.0)
-)
+    params, lr=0.05, betas=(0.0, 0.0) #!!!
+) #!!!
 
-AIM_FOR_FAKES = False
-TARGET_A_PATH = f"/home-local2/yopog.extra.nobkp/stylegan2-ada-pytorch/datasets/samples/churches/a.webp" # ./datasets/samples/cats/00000/img00000013.png
-TARGET_B_PATH = f"/home-local2/yopog.extra.nobkp/stylegan2-ada-pytorch/datasets/samples/churches/c.webp" # ./datasets/samples/cats/00000/img00000003.png
+AIM_FOR_FAKE_A = False
+AIM_FOR_FAKE_B = False
+
+TARGET_A_PATH = "./datasets/samples/cats/00000/img00000013.png"
+TARGET_B_PATH = "./datasets/samples/cats/00000/img00000003.png"
+
+# TARGET_A_PATH = "./datasets/samples/churches/a.webp"
+# TARGET_B_PATH = "./datasets/samples/churches/c.webp"
+
 SEED = 11
 
 if __name__ == "__main__":
@@ -64,10 +66,17 @@ if __name__ == "__main__":
                 # StyleJittering(variable)
             ]
         )
+        
     torch.manual_seed(SEED)
 
-    target_A = sample_image(G) if AIM_FOR_FAKES else open_target(G, TARGET_A_PATH)
-    target_B = sample_image(G) if AIM_FOR_FAKES else open_target(G, TARGET_B_PATH)
+    target_A = sample_image(G) if AIM_FOR_FAKE_A else open_target(G, TARGET_A_PATH)
+    target_B = sample_image(G) if AIM_FOR_FAKE_B else open_target(G, TARGET_B_PATH)
+
+    # save_image(
+    #     YVariable.sample_from(G).to_image(),
+    #     f"out/zero.png"
+    # )
+    # quit()
 
     A = invert_target(target_A, "A", VARIABLE_TYPE.sample_from(G))
     B = invert_target(

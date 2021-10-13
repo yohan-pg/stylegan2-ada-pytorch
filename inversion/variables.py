@@ -13,11 +13,12 @@ class Variable(ToStyles, ABC, nn.Module):
         raise NotImplementedError
 
     @abstractmethod
-    def interpolate(self, other: "Variable", alpha: float) -> Styles:
+    def interpolate(self, other: "Variable", alpha: float) -> "Variable":
         raise NotImplementedError
 
     def copy(self):
-        return self.__class__(self.G[0], self.params.clone())
+        params = self.params.clone()
+        return self.__class__(self.G[0], nn.Parameter(params) if isinstance(params, nn.Parameter) else params)
 
     def to_image(self, const_noise: bool = True):
         return self.styles_to_image(self.to_styles(), const_noise)
@@ -102,7 +103,7 @@ class WConvexCombinationVariable(Variable):
 
         return var
 
-    def interpolate(self, other: "WConvexCombinationVariable", alpha: float) -> Styles:
+    def interpolate(self, other: "WConvexCombinationVariable", alpha: float) -> Variable:
         assert self.G == other.G
         return self.__class__(
             self.G[0],
@@ -135,7 +136,7 @@ class ZVariable(Variable):
             ),
         )
 
-    # def interpolate(self, other: "ZVariable", alpha: float) -> Styles:
+    # def interpolate(self, other: "ZVariable", alpha: float) -> Variable:
     #     assert self.G == other.G
     #     # print("Warning: slerp not implemented! Using lerp.")
 
@@ -151,7 +152,7 @@ class ZVariable(Variable):
     #         d = d / d.norm(dim=-1, keepdim=True)
     #         return d
 
-    #     return ZVariable(
+    #     return self.__class__(
     #         self.G[0],
     #         slerp(
     #             self.params,
@@ -165,7 +166,25 @@ class ZVariable(Variable):
     def to_styles(self):
         # with torch.no_grad(): #?
         #     self.params.copy_(normalize_2nd_moment(self.params, dim=2))
-        return self.G[0].mapping(self.params, None)
+        return self.G[0].mapping(self.params, None) 
+
+
+class YVariable(Variable):
+    @classmethod
+    def sample_from(cls, G: nn.Module, batch_size: int = 1):
+        return YVariable(
+            G,
+            nn.Parameter(
+                (
+                    torch.zeros(batch_size, G.num_required_vectors(), G.z_dim).cuda()
+                ).squeeze(1)
+            ),
+        )
+
+    interpolate = ZVariable.interpolate
+
+    def to_styles(self):
+        return self.params.repeat(1, self.G[0].num_ws, 1)
 
 
 class PlusVariable(ABC):
@@ -209,9 +228,61 @@ class _InitializeAtMean:
     # ).cuda()
 
 
+class ConstrainToMean(ToStyles):
+    def __init__(self, variable, tau):
+        super().__init__()
+        self.variable = variable
+        self.tau = tau
+    
+    def to_image(self, const_noise: bool = True):
+        return self.variable.styles_to_image(self.variable.to_styles(), const_noise)
+
+    def styles_to_image(self, styles, const_noise: bool = True):
+        return self.variable.styles_to_image(styles, const_noise)
+
+    def copy(self):
+        return ConstrainToMean(self.variable.copy(), self.tau)
+
+    def _project(self, G, styles):
+        avg = G.mapping.w_avg.reshape(1, 1, G.w_dim)
+        diff = styles - avg
+        norm = diff.norm(dim=2, keepdim=True)
+        
+        return avg + diff * self.tau
+
+    def to_styles(self) -> Styles:
+        return self._project(self.variable.G[0], self.variable.to_styles())
+    
+    def interpolate(self, other, alpha: float) -> Variable:
+        var = self.variable.interpolate(other.variable, alpha)
+        return ConstrainToMean(var, self.tau)
+    
+    # todo build up these stats for noise...
+    # w_std = (np.sum((w_samples - w_avg) ** 2) / num_samples) ** 0.5
+    # w_opt = torch.tensor(
+    #     torch.tensor(w_avg).repeat(1, G.num_ws, 1) if w_plus else w_avg,
+    #     dtype=torch.float32,
+    #     requires_grad=True,
+    # ).cuda()
+
+
 class WVariableInitAtMean(_InitializeAtMean, WVariable):
     pass
 
+
+class WVariableInitAtMeanTruncated(WVariableInitAtMean):
+
+    # interpolate = ZVariable.interpolate
+    
+    def to_styles(self) -> Styles:
+        styles = super().to_styles()
+        # todo review that shapes work out (no broadcasting bug)
+        # return normalize_2nd_moment(styles)
+        w_avg = self.G[0].mapping.w_avg
+        # styles = w_avg.lerp(styles, 0.1) #!!
+        styles = styles / ((styles - w_avg).norm(dim=2, keepdim=True) + 1) * 10
+        print((styles - w_avg).norm(dim=2).mean())
+        return styles
 
 class WPlusVariableInitAtMean(PlusVariable, _InitializeAtMean, WVariable):
     pass

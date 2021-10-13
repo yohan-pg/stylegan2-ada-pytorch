@@ -415,6 +415,7 @@ def training_loop(
             with torch.autograd.profiler.record_function(phase.name + "_opt"):
                 for param in phase.module.parameters():
                     if param.grad is not None:
+                        assert not torch.isnan(param.grad).any()
                         misc.nan_to_num(
                             param.grad, nan=0, posinf=1e5, neginf=-1e5, out=param.grad
                         )
@@ -503,6 +504,13 @@ def training_loop(
                 print()
                 print("Aborting...")
 
+        # Save stats
+        if (rank == 0):
+            with open(os.path.join(run_dir, f"stats.txt"), "a") as f:
+                for block in G.synthesis.blocks:
+                    print(block.stats, file=f)
+                print(file=f)
+
         # Save image snapshot.
         if (
             (rank == 0)
@@ -547,6 +555,16 @@ def training_loop(
                 save_image(
                     grid, 
                     os.path.join(run_dir, f"torgb{cur_nimg//1000:06d}.png"), 
+                    nrow=len(G.synthesis.imgs[0])
+                )
+                save_image(
+                    grid.abs(), 
+                    os.path.join(run_dir, f"torgb_abs{cur_nimg//1000:06d}.png"), 
+                    nrow=len(G.synthesis.imgs[0])
+                )
+                save_image(
+                    -grid, 
+                    os.path.join(run_dir, f"torgb_neg{cur_nimg//1000:06d}.png"), 
                     nrow=len(G.synthesis.imgs[0])
                 )
 
