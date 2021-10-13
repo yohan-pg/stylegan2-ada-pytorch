@@ -13,9 +13,7 @@ if __name__ == "__main__":
     G = open_generator(G_PATH)
     D = open_discriminator(G_PATH)
 
-    variable = WConvexCombinationVariable.sample_from(G)
     # optimizer = torch.optim.Adam(variable.parameters(), lr=LEARNING_RATE)
-    optimizer = torch.optim.SGD(variable.parameters(), lr=LEARNING_RATE)
     
     criterion = VGGCriterion()
 

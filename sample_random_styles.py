@@ -6,14 +6,16 @@ from inversion import *
 
 from torchvision.utils import save_image
 
-METHOD = "adaconv"
-G_PATH = f"pretrained/alpha-{METHOD}-002600.pkl"
+G_PATH = f"training-runs/cfg_auto_large_res_adaconv/00000-afhq256cat-auto2-gamma10-kimg5000-batch8/network-snapshot-001200.pkl"
 OUT_DIR = f"out"
+VARIABLE_TYPE = WPlusVariable
+BATCH_SIZE = 16
+
+WVariable.init_at_mean = False
 
 if __name__ == "__main__":
     G = open_generator(G_PATH)
-
-    z = torch.randn(32, G.num_required_vectors(), G.w_dim).squeeze(1).cuda()
-
-    images = (G(z, None, noise_mode="const") + 1) / 2
-    save_image(images, "out/random_styles.png")
+    
+    with torch.no_grad():
+        images = VARIABLE_TYPE.sample_from(G, BATCH_SIZE).to_image()
+    save_image(images, f"out/random_styles_{VARIABLE_TYPE.__name__}.png")

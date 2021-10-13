@@ -1,9 +1,8 @@
 
 python train.py \
     --kimg 5000 \
-    --data=./datasets/afhq32cat.zip \
-    --batch 8 --metrics=fid50k,pr50k3,ppl2_wend \
-    --snap 50 \
+    --data=./datasets/afhq256cat.zip \
+    --batch 8 \
     --gamma 10 \
     --batch 8 \ 
     --gpus=2 \
@@ -12,3 +11,6 @@ python train.py \
     "${@:2}"
 
 # !!! batch size 8
+    # --metrics=fid50k,pr50k3,ppl2_wend \
+    # --cfg stylegan2map2 \
+    # --batch 8 \

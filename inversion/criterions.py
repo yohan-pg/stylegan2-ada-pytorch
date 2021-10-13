@@ -1,10 +1,11 @@
 from .prelude import *
 
+import torchvision.transforms as TF
 import functools
 
 
 class InversionCriterion(nn.Module):
-    pass # todo this is just the interface of torhc loss functions
+    pass  # todo this is just the interface of torhc loss functions
 
 
 class VGGCriterion(InversionCriterion):
@@ -20,13 +21,21 @@ class VGGCriterion(InversionCriterion):
     def extract_features(self, x):
         "Expects an image with values between 0.0 and 1.0"
         if x.shape[2] > 256:
-            x = F.interpolate(x, size=(256, 256), mode="area", align_corners=False)
+            x = F.interpolate(
+                x, size=(256, 256), mode="area", align_corners=False
+            )  #!! review this
 
-        return self.vgg16(
-            x.clone() * 255, resize_images=False, return_lpips=True
-        )
+        return self.vgg16(x.clone() * 255, resize_images=False, return_lpips=True)
 
     def forward(self, pred: ImageTensor, target: ImageTensor):
+        pred_crop = TF.CenterCrop(128)(pred)
+        target_crop = TF.CenterCrop(128)(target)
+        #!? sum not mean?
+        # return (
+        #     (self.extract_features(pred) - self.extract_features(target)).square().sum()
+        # ) * 0.2 + (
+        #     self.extract_features(pred_crop) - self.extract_features(target_crop)
+        # ).square().sum()
         return (
             (self.extract_features(pred) - self.extract_features(target)).square().sum()
-        )  #!? sum not mean?
+        )
