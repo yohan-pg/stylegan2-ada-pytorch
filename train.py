@@ -354,7 +354,7 @@ def setup_training_loop_kwargs(
     ) = 4  # enable mixed-precision training
     args.G_kwargs.synthesis_kwargs.conv_clamp = (
         args.D_kwargs.conv_clamp
-    ) = 256  # clamp activations to avoid float16 overflow 
+    ) = 256  # clamp activations to avoid float16 overflow
     args.D_kwargs.epilogue_kwargs.mbstd_group_size = spec.mbstd
 
     args.G_opt_kwargs = dnnlib.EasyDict(

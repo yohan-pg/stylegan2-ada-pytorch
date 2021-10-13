@@ -14,4 +14,4 @@ function gpu_small {
 function gpu_large {
     export CUDA_VISIBLE_DEVICES=1
 }
-gpu_all
+gpu_large
