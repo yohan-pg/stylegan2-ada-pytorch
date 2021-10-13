@@ -236,6 +236,18 @@ def setup_training_loop_kwargs(
             ramp=None,
             map=8,
         ),  # Uses 
+        "stylegan2linear": dict(
+            ref_gpus=8,
+            kimg=25000,
+            mb=32,
+            mbstd=4,
+            fmaps=1,
+            lrate=0.002,
+            gamma=10,
+            ema=10,
+            ramp=None,
+            map=1,
+        ),  # Uses 
         "stylegan2map2": dict(
             ref_gpus=8,
             kimg=25000,
@@ -699,7 +711,7 @@ class CommaSeparatedList(click.ParamType):
     "--cfg",
     help="Base config [default: auto]",
     type=click.Choice(
-        ["auto", "stylegan2", "stylegan2map2", "paper256", "paper512", "paper1024", "cifar", "custom", "auto0", "auto1", "auto2"]
+        ["auto", "stylegan2", "stylegan2map2", "stylegan2linear", "paper256", "paper512", "paper1024", "cifar", "custom", "auto0", "auto1", "auto2"]
     ),
 )
 @click.option("--gamma", help="Override R1 gamma", type=float)

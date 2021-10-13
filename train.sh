@@ -8,7 +8,7 @@ python train.py \
     --fp32 True \
     --outdir="./training-runs/$1" \
     "${@:2}"
-    
+
     # --metrics=fid50k,pr50k3,ppl2_wend \
     # --cfg stylegan2map2 \
     # --batch 8 \

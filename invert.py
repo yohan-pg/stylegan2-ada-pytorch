@@ -32,7 +32,7 @@ TRANSFORM_TARGETS = False
 # G_PATH = "training-runs/cfg_linear_mapper_large_res_adaconv/00000-afhq256cat-auto12-gamma10-kimg5000-batch8/network-snapshot-001200.pkl"
 
 METHOD = "adaconv"
-G_PATH = "training-runs/cfg_auto_large_res_adaconv_fixed_lr_mult/00000-afhq256cat-auto2-gamma10-kimg5000-batch8/network-snapshot-001200.pkl"
+G_PATH = "training-runs/cfg_auto_large_res_adaconv_fixed_lr_mult/00000-afhq256cat-auto2-gamma10-kimg5000-batch8/network-snapshot-000000.pkl" #!!!000
 
 NUM_STEPS = 2_000
 SEQUENTIAL = False
