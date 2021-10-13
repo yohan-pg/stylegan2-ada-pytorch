@@ -608,6 +608,8 @@ class SynthesisBlock(torch.nn.Module):
                 channels_last=self.channels_last,
             )
 
+        self.stats = []
+
     def forward(self, x, img, ws, force_fp32=False, fused_modconv=None, **layer_kwargs):
         if self.use_adaconv:
             misc.assert_shape(
@@ -644,7 +646,9 @@ class SynthesisBlock(torch.nn.Module):
                 x, [None, self.in_channels, self.resolution // 2, self.resolution // 2]
             )
             x = x.to(dtype=dtype, memory_format=memory_format)
-
+        
+        self.stats = []
+        
         # Main layers.
         if self.in_channels == 0:
             x = self.conv1(x, next(w_iter), fused_modconv=fused_modconv, **layer_kwargs)
@@ -661,7 +665,9 @@ class SynthesisBlock(torch.nn.Module):
             x = y.add_(x)
         else:
             x = self.conv0(x, next(w_iter), fused_modconv=fused_modconv, **layer_kwargs)
+            self.stats.append((x.mean().item(), x.std().item()))
             x = self.conv1(x, next(w_iter), fused_modconv=fused_modconv, **layer_kwargs)
+        self.stats.append((x.mean().item(), x.std().item()))
 
         # ToRGB.
         if img is not None:
@@ -711,6 +717,8 @@ class SynthesisNetwork(torch.nn.Module):
         fp16_resolution = max(2 ** (self.img_resolution_log2 + 1 - num_fp16_res), 8)
         self.use_adaconv = block_kwargs["use_adaconv"]
 
+        self.blocks = []
+
         self.num_ws = 0
         for res in self.block_resolutions:
             in_channels = channels_dict[res // 2] if res > 4 else 0
@@ -731,6 +739,7 @@ class SynthesisNetwork(torch.nn.Module):
             if is_last:
                 self.num_ws += block.num_torgb
             setattr(self, f"b{res}", block)
+            self.blocks.append(block)
 
     def forward(self, ws, **block_kwargs):
         block_ws = []
