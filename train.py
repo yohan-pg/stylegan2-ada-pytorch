@@ -68,6 +68,8 @@ def setup_training_loop_kwargs(
     freeze_mapper=None,
     div_by_sqrt=None,
     normalize_latent=None,
+    use_noise=None,
+    inject_in_torgb=None,
 ):
     args = dnnlib.EasyDict()
 
@@ -344,7 +346,9 @@ def setup_training_loop_kwargs(
     args.G_kwargs.mapping_kwargs.freeze_mapper = freeze_mapper is True
     args.G_kwargs.synthesis_kwargs.freeze_affine = freeze_affine is True
     args.G_kwargs.mapping_kwargs.div_by_sqrt = div_by_sqrt is True
-    args.G_kwargs.mapping_kwargs.normalize_latent = normalize_latent is not False
+    args.G_kwargs.mapping_kwargs.normalize_latent = normalize_latent is True
+    args.G_kwargs.synthesis_kwargs.use_noise = use_noise is True
+    args.G_kwargs.synthesis_kwargs.inject_in_torgb = inject_in_torgb is True
 
     args.D_kwargs = dnnlib.EasyDict(
         class_name="training.networks.Discriminator",
@@ -783,6 +787,9 @@ class CommaSeparatedList(click.ParamType):
 @click.option("--freeze_affine", type=bool, metavar="BOOL")
 @click.option("--div_by_sqrt", type=bool, metavar="BOOL")
 @click.option("--normalize_latent", type=bool, metavar="BOOL")
+@click.option("--use_noise", type=bool, metavar="BOOL")
+@click.option("--inject_in_torgb", type=bool, metavar="BOOL")
+
 def main(ctx, outdir, dry_run, **config_kwargs):
     """Train a GAN using the techniques described in the paper
     "Training Generative Adversarial Networks with Limited Data".
@@ -867,6 +874,8 @@ def main(ctx, outdir, dry_run, **config_kwargs):
     print(f"Freeze Affine:    {args.G_kwargs.synthesis_kwargs.freeze_affine}")
     print(f"Div By Sqrt:    {args.G_kwargs.mapping_kwargs.div_by_sqrt}")
     print(f"Normalize Latent:    {args.G_kwargs.mapping_kwargs.normalize_latent}")
+    print(f"Inject In ToRGB:    {args.G_kwargs.synthesis_kwargs.inject_in_torgb}")
+    print(f"Use Noise:    {args.G_kwargs.synthesis_kwargs.use_noise}")
     print()
 
     # Dry run?

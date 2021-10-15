@@ -19,35 +19,35 @@ DISABLE_NORMALIZE = False
 FORCE_NORMALIZE = False
 FORCE_LERP = False
 SAME_SEED = False 
-SEQUENTIAL = False
+SEQUENTIAL = True
 FINE_TUNE_G = False 
 TRANSFORM_TARGETS = False
 
-# if False:
-#     METHOD = "adain"
-#     G_PATH = "training-runs/cfg_auto_large_res_adain/00004-afhq256cat-auto2-gamma10-kimg5000-batch8/network-snapshot-001200.pkl"
-# else:
-#     METHOD = "adaconv"
-#     G_PATH = "training-runs/cfg_auto_large_res_adaconv/00000-afhq256cat-auto2-gamma10-kimg5000-batch8/network-snapshot-001200.pkl"
+if False:
+    METHOD = "adain"
+    G_PATH = "training-runs/cfg_auto_large_res_adain/00004-afhq256cat-auto2-gamma10-kimg5000-batch8/network-snapshot-001200.pkl"
+else:
+    METHOD = "adaconv"
+    G_PATH = "training-runs/cfg_auto_large_res_adaconv/00000-afhq256cat-auto2-gamma10-kimg5000-batch8/network-snapshot-001200.pkl"
 
 # METHOD = "adaconv"
 # G_PATH = "training-runs/cfg_linear_mapper_large_res_adaconv/00000-afhq256cat-auto12-gamma10-kimg5000-batch8/network-snapshot-001200.pkl"
 
-METHOD = "adaconv"
-G_PATH = "training-runs/cfg_auto_large_res_adain_frozen_mapper_and_affine/00000-afhq256cat-auto2-gamma10-kimg5000-batch8/network-snapshot-000000.pkl"
+# METHOD = "adaconv"
+# G_PATH = "training-runs/cfg_auto_large_res_adain_frozen_mapper_and_affine/00000-afhq256cat-auto2-gamma10-kimg5000-batch8/network-snapshot-000000.pkl"
 
-NUM_STEPS = 300
+NUM_STEPS = 200
 CRITERION_TYPE = VGGCriterion
 SNAPSHOT_FREQ = 20
-OPTIMIZER_CTOR = lambda params: torch.optim.AdamW(
+OPTIMIZER_CTOR = lambda params: torch.optim.Adam(
     params, 
-    lr=2.0,
-    betas=(0.0, 0.0),
+    lr=1.0,
+    # betas=(0.0, 0.0),
     # weight_decay=0.1
 )
 
 VARIABLE_TYPES = [
-    ZPlusVariable
+    ZVariable
 ]
 
 AIM_FOR_FAKE_A = False
@@ -85,12 +85,11 @@ for VARIABLE_TYPE in VARIABLE_TYPES:
 
         G = open_generator(G_PATH)
 
-        U, S, V = G.mapping.fc0.weight.svd()
-        U, S, V = G.synthesis.b128.conv0.affine.weight.svd()
-        plt.plot(S.detach().cpu())
-        plt.savefig("tmp.png")
-        breakpoint()
-        quit()
+        # # U, S, V = G.mapping.fc0.weight.svd()
+        # U, S, V = G.synthesis.b32.conv0.affine.weight.svd()
+        # plt.plot(S.detach().cpu())
+        # plt.savefig("tmp.png")
+        # quit()
 
         if DISABLE_NORMALIZE:
             G.mapping.normalize = False

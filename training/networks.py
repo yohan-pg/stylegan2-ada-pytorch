@@ -20,9 +20,6 @@ import math
 DISABLE_NOISE = True
 INJECT_IN_TORGB = False
 
-FREEZE_MAPPER = True 
-FREEZE_AFFINE = True 
-
 
 # ----------------------------------------------------------------------------
 
@@ -30,11 +27,6 @@ FREEZE_AFFINE = True
 @misc.profiled_function
 def normalize_2nd_moment(x, dim=1, eps=1e-8):
     return x * (x.square().mean(dim=dim, keepdim=True) + eps).rsqrt()
-
-
-def freeze(module):
-    for param in module.parameters():
-        param.requires_grad = False
 
 
 # ----------------------------------------------------------------------------
@@ -285,11 +277,11 @@ class MappingNetwork(torch.nn.Module):
         if num_ws is not None and w_avg_beta is not None:
             self.register_buffer("w_avg", torch.zeros([w_dim]))
 
-    def parameters(self):
-        if self.freeze_mapper:
-            return []
-        else:
-            return super().parameters()
+    # def parameters(self):
+    #     if self.freeze_mapper:
+    #         return []
+    #     else:
+    #         return super().parameters()
 
     def _forward(
         self, z, c, truncation_psi=1, truncation_cutoff=None, skip_w_avg_update=False
@@ -399,7 +391,7 @@ class SynthesisLayer(torch.nn.Module):
         self.resolution = resolution
         self.up = up
         self.w_dim = w_dim
-        self.use_noise = not DISABLE_NOISE
+        self.use_noise = use_noise
         self.in_channels = in_channels
         self.activation = activation
         self.conv_clamp = conv_clamp
@@ -408,7 +400,6 @@ class SynthesisLayer(torch.nn.Module):
         self.act_gain = bias_act.activation_funcs[activation].def_gain
         self.use_adaconv = use_adaconv
         self.freeze_affine = freeze_affine
-
         self.affine = FullyConnectedLayer(w_dim, in_channels, bias_init=1) 
 
         memory_format = (
@@ -424,14 +415,14 @@ class SynthesisLayer(torch.nn.Module):
             self.noise_strength = torch.nn.Parameter(torch.zeros([]))
 
         self.bias = torch.nn.Parameter(torch.zeros([out_channels]))
-
-    def parameters(self):
-        params = set(super().parameters())
+    #!!!
+    # def parameters(self):
+    #     params = set(super().parameters())
         
-        if self.freeze_affine:
-            params.difference_update(set(self.affine.parameters()))
+    #     if self.freeze_affine:
+    #         params.difference_update(set(self.affine.parameters()))
         
-        return params
+    #     return params
 
     def forward(self, x, w, noise_mode="random", fused_modconv=True, gain=1):
         assert noise_mode in ["random", "const", "none"]
@@ -495,13 +486,15 @@ class ToRGBLayer(torch.nn.Module):
         conv_clamp=None,
         channels_last=False,
         use_adaconv=False,
+        inject_in_torgb=False
     ):
         super().__init__()
         self.conv_clamp = conv_clamp
         self.w_dim = w_dim
         self.in_channels = in_channels
         self.out_channels = out_channels
-        if INJECT_IN_TORGB:
+        self.inject_in_torgb = inject_in_torgb
+        if self.inject_in_torgb:
             self.affine = FullyConnectedLayer(w_dim, in_channels, bias_init=1)
         memory_format = (
             torch.channels_last if channels_last else torch.contiguous_format
@@ -516,7 +509,7 @@ class ToRGBLayer(torch.nn.Module):
         self.use_adaconv = use_adaconv
 
     def forward(self, x, w, fused_modconv=True):
-        if INJECT_IN_TORGB:
+        if self.inject_in_torgb:
             if self.use_adaconv:
                 styles = self.affine(w.reshape(-1, self.w_dim)).reshape(
                     w.shape[0], w.shape[1], self.in_channels
@@ -564,6 +557,7 @@ class SynthesisBlock(torch.nn.Module):
         conv_clamp=None,  # Clamp the output of convolution layers to +-X, None = disable clamping.
         use_fp16=False,  # Use FP16 for this block?
         fp16_channels_last=False,  # Use channels-last memory format with FP16?
+        inject_in_torgb=False,
         **layer_kwargs,  # Arguments for SynthesisLayer.
     ):
         assert architecture in ["orig", "skip", "resnet"]
@@ -619,6 +613,7 @@ class SynthesisBlock(torch.nn.Module):
                 conv_clamp=conv_clamp,
                 channels_last=self.channels_last,
                 use_adaconv=self.use_adaconv,
+                inject_in_torgb=inject_in_torgb
             )
             self.num_torgb += 1
 

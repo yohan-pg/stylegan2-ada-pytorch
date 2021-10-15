@@ -42,6 +42,9 @@ class ZVariable(Variable):
             ),
         )
 
+    def to_W(self) -> WVariable:
+        return WVariable(self.G[0], self.to_styles()[:, :self.G[0].num_required_vectors()])
+
     def interpolate_in_W(self, other: "ZVariable", alpha: float) -> Variable:
         return WVariable(
             self.G[0],
