@@ -28,14 +28,15 @@ class VGGCriterion(InversionCriterion):
         return self.vgg16(x.clone() * 255, resize_images=False, return_lpips=True)
 
     def forward(self, pred: ImageTensor, target: ImageTensor):
-        pred_crop = TF.CenterCrop(128)(pred)
-        target_crop = TF.CenterCrop(128)(target)
-        #!? sum not mean?
-        # return (
-        #     (self.extract_features(pred) - self.extract_features(target)).square().sum()
-        # ) * 0.2 + (
-        #     self.extract_features(pred_crop) - self.extract_features(target_crop)
-        # ).square().sum()
+        if False:
+            pred_crop = TF.CenterCrop(128)(pred)
+            target_crop = TF.CenterCrop(128)(target)
+            # return (
+            #     (self.extract_features(pred) - self.extract_features(target)).square().sum()
+            # ) * 0.2 + (
+            #     self.extract_features(pred_crop) - self.extract_features(target_crop)
+            # ).square().sum()
         return (
             (self.extract_features(pred) - self.extract_features(target)).square().sum()
         )
+        #!? sum not mean?

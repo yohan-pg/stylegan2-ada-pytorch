@@ -6,12 +6,10 @@ from inversion import *
 
 from torchvision.utils import save_image
 
-G_PATH = f"training-runs/cfg_auto_large_res_adaconv/00000-afhq256cat-auto2-gamma10-kimg5000-batch8/network-snapshot-001200.pkl"
+G_PATH = latest_snapshot("cfg_auto_large_res_no_div_slow_mapper_and_affine")
 OUT_DIR = f"out"
-VARIABLE_TYPE = WPlusVariable
+VARIABLE_TYPE = ZVariable
 BATCH_SIZE = 16
-
-WVariable.init_at_mean = False
 
 if __name__ == "__main__":
     G = open_generator(G_PATH)

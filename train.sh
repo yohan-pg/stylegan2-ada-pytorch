@@ -7,7 +7,6 @@ python train.py \
     --batch 8 \
     --snap 50 \
     --gamma 10 \
-    --batch 8 \
     --gpus 2 \
     --fp32 True \
     --outdir="./training-runs/$1" \

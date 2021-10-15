@@ -64,6 +64,12 @@ def setup_training_loop_kwargs(
     # Our options
     sample_w_plus=None,
     use_adaconv=None,
+    freeze_affine=None,
+    freeze_mapper=None,
+    div_by_sqrt=None,
+    normalize_latent=None,
+    use_noise=None,
+    inject_in_torgb=None,
 ):
     args = dnnlib.EasyDict()
 
@@ -325,7 +331,7 @@ def setup_training_loop_kwargs(
         spec.fmaps = 1 if res >= 512 else 0.5
         spec.lrate = 0.002 if res >= 1024 else 0.0025
         spec.gamma = 0.0002 * (res ** 2) / spec.mb  # heuristic formula
-        spec.ema = spec.mb * 10 / 32 #! dependency on minibatch
+        spec.ema = spec.mb * 10 / 32 
 
     args.G_kwargs = dnnlib.EasyDict(
         class_name="training.networks.Generator",
@@ -337,6 +343,12 @@ def setup_training_loop_kwargs(
     # *
     args.G_kwargs.mapping_kwargs.sample_w_plus = sample_w_plus is True
     args.G_kwargs.use_adaconv = use_adaconv is True
+    args.G_kwargs.mapping_kwargs.freeze_mapper = freeze_mapper is True
+    args.G_kwargs.synthesis_kwargs.freeze_affine = freeze_affine is True
+    args.G_kwargs.mapping_kwargs.div_by_sqrt = div_by_sqrt is True
+    args.G_kwargs.mapping_kwargs.normalize_latent = normalize_latent is True
+    args.G_kwargs.synthesis_kwargs.use_noise = use_noise is True
+    args.G_kwargs.synthesis_kwargs.inject_in_torgb = inject_in_torgb is True
 
     args.D_kwargs = dnnlib.EasyDict(
         class_name="training.networks.Discriminator",
@@ -771,9 +783,13 @@ class CommaSeparatedList(click.ParamType):
 # Our (adaconv) options
 @click.option("--sample_w_plus", type=bool, metavar="BOOL")
 @click.option("--use_adaconv", type=bool, metavar="BOOL")
+@click.option("--freeze_mapper", type=bool, metavar="BOOL")
+@click.option("--freeze_affine", type=bool, metavar="BOOL")
+@click.option("--div_by_sqrt", type=bool, metavar="BOOL")
+@click.option("--normalize_latent", type=bool, metavar="BOOL")
+@click.option("--use_noise", type=bool, metavar="BOOL")
+@click.option("--inject_in_torgb", type=bool, metavar="BOOL")
 
-
-#
 def main(ctx, outdir, dry_run, **config_kwargs):
     """Train a GAN using the techniques described in the paper
     "Training Generative Adversarial Networks with Limited Data".
@@ -852,8 +868,14 @@ def main(ctx, outdir, dry_run, **config_kwargs):
     print(f"Conditional model:  {args.training_set_kwargs.use_labels}")
     print(f"Dataset x-flips:    {args.training_set_kwargs.xflip}")
     print(f"---")
-    print(f"Sample W+:    {args.G_kwargs.mapping_kwargs.sample_w_plus}")
     print(f"Use Adaconv:    {args.G_kwargs.use_adaconv}")
+    print(f"Sample W+:    {args.G_kwargs.mapping_kwargs.sample_w_plus}")
+    print(f"Freeze Mapper:    {args.G_kwargs.mapping_kwargs.freeze_mapper}")
+    print(f"Freeze Affine:    {args.G_kwargs.synthesis_kwargs.freeze_affine}")
+    print(f"Div By Sqrt:    {args.G_kwargs.mapping_kwargs.div_by_sqrt}")
+    print(f"Normalize Latent:    {args.G_kwargs.mapping_kwargs.normalize_latent}")
+    print(f"Inject In ToRGB:    {args.G_kwargs.synthesis_kwargs.inject_in_torgb}")
+    print(f"Use Noise:    {args.G_kwargs.synthesis_kwargs.use_noise}")
     print()
 
     # Dry run?

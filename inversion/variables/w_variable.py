@@ -7,6 +7,7 @@ def lerp(a, b, alpha):
 
 class WVariable(Variable):
     init_at_mean = True
+    space_name = "W"
 
     @classmethod
     def sample_from(cls, G: nn.Module, batch_size: int = 1, avg_samples=2_000):

@@ -9,7 +9,7 @@ G_PATH = "pretrained/resnet-adain-000800.pkl"
 # G_PATH = f"pretrained/resnet-{METHOD}-000800.pkl"
 
 OUT_DIR = f"out"
-VARIABLE_TYPE = WVariable
+VARIABLE_TYPE = ZVariable
 BATCH_SIZE = 12
 
 if __name__ == "__main__":

@@ -2,25 +2,6 @@ from .prelude import *
 from .variables import *
 
 
-class Interpolator:
-    def __init__(self, G):
-        self.G = G
-
-    @torch.no_grad()
-    def interpolate(
-        self, A: Variable, B: Variable, num_steps: int = 7, gain=1.0
-    ) -> List[Variable]:
-        frames = []
-        variables = []
-
-        for i in range(num_steps):
-            alpha = i / (num_steps - 1) * gain
-            variables.append(A.interpolate(B, alpha))
-            frames.append((self.G.synthesis(variables[-1].to_styles()) + 1) / 2)
-
-        return Interpolation(variables, frames)
-
-
 @dataclass(eq=False)
 class Interpolation:
     variables: List[Variable]
@@ -58,3 +39,24 @@ class Interpolation:
 
     def latent_distance(self, criterion) -> float:
         return criterion(self.variables[0].data, self.variables[-1].data)
+
+    @staticmethod
+    def from_variables(
+        A: Variable, B: Variable, num_steps: int = 7, gain=1.0
+    ) -> "Interpolation":
+        frames = []
+        variables = []
+
+        for i in range(num_steps):
+            alpha = i / (num_steps - 1) * gain
+            variables.append(A.interpolate(B, alpha))
+            frames.append(variables[-1].to_image())
+
+        return Interpolation(variables, frames)
+
+    @staticmethod
+    def mix_between(
+        A: Variable, B: Variable
+    ):
+        return Interpolation.from_variables(A, B, num_steps=3).frames[1]
+

@@ -29,6 +29,12 @@ class Variable(ToStyles, ABC, nn.Module):
             nn.Parameter(data) if isinstance(self.data, nn.Parameter) else data,
         )
 
+    def edit(self, data):
+        return self.__class_(
+            self.G[0], 
+            self.data + data
+        )
+
     def norm(self):
         return self.data.norm(dim=(1, 2))
 

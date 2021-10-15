@@ -3,6 +3,8 @@ from .w_variable import *
 
 
 class ZVariable(Variable):
+    space_name = "Zw"
+    
     @classmethod
     def sample_from(cls, G: nn.Module, batch_size: int = 1):
         return cls(
@@ -39,6 +41,9 @@ class ZVariable(Variable):
                 alpha,
             ),
         )
+
+    def to_W(self) -> WVariable:
+        return WVariable(self.G[0], self.to_styles()[:, :self.G[0].num_required_vectors()])
 
     def interpolate_in_W(self, other: "ZVariable", alpha: float) -> Variable:
         return WVariable(
