@@ -22,7 +22,7 @@ from training.networks import normalize_2nd_moment
 from abc import ABC, abstractmethod, abstractstaticmethod, abstractclassmethod
 from dataclasses import dataclass
 
-from typing import Optional, Type, List, final, Tuple, Callable, Iterator, Iterable
+from typing import Optional, Type, List, final, Tuple, Callable, Iterator, Iterable, Dict, ClassVar
 
 
 ImageTensor = torch.Tensor # [B, C, H, W] with data between 0 and 1

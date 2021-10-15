@@ -5,6 +5,8 @@ from .init_at_mean import *
 
 
 class _WPlusVariable(ABC):
+    space_name = "W+"
+
     @classmethod
     def sample_from(cls, G: nn.Module, batch_size: int = 1):
         return cls(
@@ -22,11 +24,9 @@ class WPlusVariable(_WPlusVariable, WVariable):
     pass
 
 
-# class ZPlusVariable(PlusVariable, ZVariable):
-#     pass
+class _ZPlusVariable:
+    space_name = "Z+"
 
-
-class ZPlusVariableInitAtMean(ZVariableInitAtMean):
     @classmethod
     def sample_from(cls, G: nn.Module, batch_size: int = 1):
         return cls(
@@ -44,4 +44,25 @@ class ZPlusVariableInitAtMean(ZVariableInitAtMean):
                 for i in range(self.G[0].num_ws)
             ],
             dim=1
+        )
+
+class ZPlusVariable(_ZPlusVariable, ZVariable):
+    @classmethod
+    def sample_from(cls, G: nn.Module, batch_size: int = 1):
+        return cls(
+            G,
+            nn.Parameter(
+                torch.randn(batch_size, G.num_required_vectors() * G.num_ws, G.w_dim).cuda()
+            ),
+        )
+
+
+class ZPlusVariableInitAtMean(_ZPlusVariable, ZVariableInitAtMean):
+    @classmethod
+    def sample_from(cls, G: nn.Module, batch_size: int = 1):
+        return cls(
+            G,
+            nn.Parameter(
+                torch.zeros(batch_size, G.num_required_vectors() * G.num_ws, G.w_dim).cuda()
+            ),
         )

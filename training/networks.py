@@ -17,8 +17,11 @@ from torch_utils.ops import fma
 import torch.nn.functional as F
 import math
 
-DISABLE_NOISE = True #!
+DISABLE_NOISE = True
 INJECT_IN_TORGB = False
+
+FREEZE_MAPPER = True 
+FREEZE_AFFINE = True 
 
 
 # ----------------------------------------------------------------------------
@@ -235,11 +238,14 @@ class MappingNetwork(torch.nn.Module):
         lr_multiplier=0.01,  # Learning rate multiplier for the mapping layers.
         w_avg_beta=0.995,  # Decay for tracking the moving average of W during training, None = do not track.
         sample_w_plus=False,
-        sample_for_adaconv=False,
+        use_adaconv=False,
+        freeze_mapper=False,
         num_adaconv_vectors=0,
-        normalize=False #!
+        normalize_latent=False,
+        div_by_sqrt=False
     ):
         super().__init__()
+
         self.z_dim = z_dim
         self.c_dim = c_dim
         self.w_dim = w_dim
@@ -247,9 +253,11 @@ class MappingNetwork(torch.nn.Module):
         self.num_layers = num_layers
         self.w_avg_beta = w_avg_beta
         self.sample_w_plus = sample_w_plus
-        self.sample_for_adaconv = sample_for_adaconv
+        self.use_adaconv = use_adaconv
         self.num_adaconv_vectors = num_adaconv_vectors
-        self.normalize = normalize
+        self.normalize_latent = normalize_latent
+        self.freeze_mapper = freeze_mapper
+        self.div_by_sqrt = div_by_sqrt
 
         if embed_features is None:
             embed_features = w_dim
@@ -277,6 +285,12 @@ class MappingNetwork(torch.nn.Module):
         if num_ws is not None and w_avg_beta is not None:
             self.register_buffer("w_avg", torch.zeros([w_dim]))
 
+    def parameters(self):
+        if self.freeze_mapper:
+            return []
+        else:
+            return super().parameters()
+
     def _forward(
         self, z, c, truncation_psi=1, truncation_cutoff=None, skip_w_avg_update=False
     ):
@@ -286,7 +300,7 @@ class MappingNetwork(torch.nn.Module):
             if self.z_dim > 0:
                 misc.assert_shape(z, [None, self.z_dim])
                 x = z.to(torch.float32)
-                if self.normalize:
+                if self.normalize_latent:
                     x = normalize_2nd_moment(x)
             if self.c_dim > 0:
                 misc.assert_shape(c, [None, self.c_dim])
@@ -294,7 +308,7 @@ class MappingNetwork(torch.nn.Module):
                 y = normalize_2nd_moment(self.embed(c.to(torch.float32)))
                 x = torch.cat([x, y], dim=1) if x is not None else y
 
-        if self.sample_for_adaconv:
+        if self.div_by_sqrt:
             x = x / math.sqrt(self.num_required_vectors())
 
         # Main layers.
@@ -324,17 +338,17 @@ class MappingNetwork(torch.nn.Module):
 
     def num_required_vectors(self):
         return (self.num_ws if self.sample_w_plus else 1) * (
-            self.num_adaconv_vectors if self.sample_for_adaconv else 1
+            self.num_adaconv_vectors if self.use_adaconv else 1
         )
 
     def num_vectors_per_adain(self):
-        return self.num_adaconv_vectors if self.sample_for_adaconv else 1
+        return self.num_adaconv_vectors if self.use_adaconv else 1
     
     def forward(self, z, c, **kwargs):
         assert self.num_ws is not None
 
         with torch.autograd.profiler.record_function("broadcast"):
-            if not self.sample_w_plus and not self.sample_for_adaconv:
+            if not self.sample_w_plus and not self.use_adaconv:
                 assert z.ndim == 2
                 return (
                     self._forward(z, c, **kwargs)
@@ -379,6 +393,7 @@ class SynthesisLayer(torch.nn.Module):
         conv_clamp=None,  # Clamp the output of convolution layers to +-X, None = disable clamping.
         channels_last=False,  # Use channels_last format for the weights?
         use_adaconv=False,
+        freeze_affine=False,
     ):
         super().__init__()
         self.resolution = resolution
@@ -392,8 +407,10 @@ class SynthesisLayer(torch.nn.Module):
         self.padding = kernel_size // 2
         self.act_gain = bias_act.activation_funcs[activation].def_gain
         self.use_adaconv = use_adaconv
+        self.freeze_affine = freeze_affine
 
-        self.affine = FullyConnectedLayer(w_dim, in_channels, bias_init=1)
+        self.affine = FullyConnectedLayer(w_dim, in_channels, bias_init=1) 
+
         memory_format = (
             torch.channels_last if channels_last else torch.contiguous_format
         )
@@ -407,6 +424,14 @@ class SynthesisLayer(torch.nn.Module):
             self.noise_strength = torch.nn.Parameter(torch.zeros([]))
 
         self.bias = torch.nn.Parameter(torch.zeros([out_channels]))
+
+    def parameters(self):
+        params = set(super().parameters())
+        
+        if self.freeze_affine:
+            params.difference_update(set(self.affine.parameters()))
+        
+        return params
 
     def forward(self, x, w, noise_mode="random", fused_modconv=True, gain=1):
         assert noise_mode in ["random", "const", "none"]
@@ -817,7 +842,7 @@ class Generator(torch.nn.Module):
             z_dim=z_dim,
             c_dim=c_dim,
             w_dim=w_dim,
-            sample_for_adaconv=use_adaconv,
+            use_adaconv=use_adaconv,
             num_ws=self.num_ws,
             num_adaconv_vectors=self.synthesis.channel_max,
             **mapping_kwargs,

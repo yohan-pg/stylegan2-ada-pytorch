@@ -18,6 +18,8 @@ import shutil
 DISABLE_NORMALIZE = False
 FORCE_NORMALIZE = False
 FORCE_LERP = False
+SAME_SEED = False 
+SEQUENTIAL = False
 FINE_TUNE_G = False 
 TRANSFORM_TARGETS = False
 
@@ -32,30 +34,34 @@ TRANSFORM_TARGETS = False
 # G_PATH = "training-runs/cfg_linear_mapper_large_res_adaconv/00000-afhq256cat-auto12-gamma10-kimg5000-batch8/network-snapshot-001200.pkl"
 
 METHOD = "adaconv"
-G_PATH = "training-runs/cfg_auto_large_res_adaconv_fixed_lr_mult/00000-afhq256cat-auto2-gamma10-kimg5000-batch8/network-snapshot-000000.pkl" #!!!000
+G_PATH = "training-runs/cfg_auto_large_res_adain_frozen_mapper_and_affine/00000-afhq256cat-auto2-gamma10-kimg5000-batch8/network-snapshot-000000.pkl"
 
-NUM_STEPS = 2_000
-SEQUENTIAL = False
+NUM_STEPS = 300
 CRITERION_TYPE = VGGCriterion
 SNAPSHOT_FREQ = 20
-OPTIMIZER_CTOR = lambda params: torch.optim.Adam(
+OPTIMIZER_CTOR = lambda params: torch.optim.AdamW(
     params, 
-    lr=0.01 / (math.sqrt(512) if (issubclass(VARIABLE_TYPE, ZVariable)) else 1),
-    betas=(0.0, 0.0) 
+    lr=2.0,
+    betas=(0.0, 0.0),
+    # weight_decay=0.1
 )
 
 VARIABLE_TYPES = [
-    WVariable
+    ZPlusVariable
 ]
 
 AIM_FOR_FAKE_A = False
 AIM_FOR_FAKE_B = False
 
-TARGET_A_PATH = "./datasets/afhq2/train/cat/flickr_cat_000004.png"
-TARGET_B_PATH = "./datasets/afhq2/train/cat/flickr_cat_000007.png"
+# TARGET_A_PATH = "./datasets/afhq2/train/cat/flickr_cat_000004.png"
+# TARGET_B_PATH = "./datasets/afhq2/train/cat/flickr_cat_000007.png"
 
-# TARGET_A_PATH = "./datasets/afhq2/train/cat/flickr_cat_000006.png"
-# TARGET_B_PATH = "./datasets/afhq2/train/cat/flickr_cat_000018.png"
+# TARGET_A_PATH = "./datasets/afhq2/train/dog/flickr_dog_000021.png"
+# TARGET_B_PATH = "./datasets/afhq2/train/dog/flickr_dog_000022.png"
+
+TARGET_A_PATH = "./datasets/afhq2/train/cat/flickr_cat_000006.png"
+TARGET_B_PATH = "./datasets/afhq2/train/cat/flickr_cat_000018.png"
+# TARGET_B_PATH = "./datasets/afhq2/train/cat/flickr_cat_000006.png"
 
 # TARGET_A_PATH = "datasets/afhq2/train/cat/pixabay_cat_000077.png"
 # TARGET_B_PATH = "datasets/afhq2/train/cat/pixabay_cat_004220.png"
@@ -79,12 +85,12 @@ for VARIABLE_TYPE in VARIABLE_TYPES:
 
         G = open_generator(G_PATH)
 
-        # U, S, V = G.mapping.fc0.weight.svd()
-        # U, S, V = G.synthesis.b128.conv0.affine.weight.svd()
-        # plt.plot(S.detach().cpu())
-        # plt.savefig("tmp.png")
-        # breakpoint()
-        # quit()
+        U, S, V = G.mapping.fc0.weight.svd()
+        U, S, V = G.synthesis.b128.conv0.affine.weight.svd()
+        plt.plot(S.detach().cpu())
+        plt.savefig("tmp.png")
+        breakpoint()
+        quit()
 
         if DISABLE_NORMALIZE:
             G.mapping.normalize = False
@@ -110,10 +116,15 @@ for VARIABLE_TYPE in VARIABLE_TYPES:
             )
 
         torch.manual_seed(SEED)
-
+        
+        if SAME_SEED:
+            torch.manual_seed(SEED)
         target_A = (
             sample_image(G) if AIM_FOR_FAKE_A else open_target(G, TARGET_A_PATH)
         )
+
+        if SAME_SEED:
+            torch.manual_seed(SEED)
         target_B = (
             sample_image(G) if AIM_FOR_FAKE_B else open_target(G, TARGET_B_PATH)
         )   
@@ -145,18 +156,19 @@ for VARIABLE_TYPE in VARIABLE_TYPES:
         B.save_optim_trace(f"{OUT_DIR}/trace_B.png")
 
         if VARIABLE_TYPE is WVariable:
-            Interpolator(G).interpolate(
+            Interpolation.from_variables(
                 A.final_variable,
                 w_mean,
             ).save(f"{OUT_DIR}/interpolation_A_to_mean_w.png")
-            Interpolator(G).interpolate(
+            Interpolation.from_variables(
                 B.final_variable,
                 w_mean,
             ).save(f"{OUT_DIR}/interpolation_B_to_mean_w.png")
 
-        interpolation = Interpolator(G).interpolate(
+        interpolation = Interpolation.from_variables(
             A.final_variable,
             B.final_variable,
+            gain=1.0
         )
 
         interpolation.save(f"{OUT_DIR}/interpolation_A_to_B.png")
@@ -165,12 +177,15 @@ for VARIABLE_TYPE in VARIABLE_TYPES:
 
         ppl = interpolation.ppl(criterion)
         endpoint_distance = interpolation.endpoint_distance(criterion)
+        print("PPL:", ppl, endpoint_distance)
 
         ppl_l2 = interpolation.ppl(nn.MSELoss())
         endpoint_distance_l2 = interpolation.endpoint_distance(nn.MSELoss())
+        print("L2:", ppl_l2, endpoint_distance_l2)
 
         a_norm = A.final_variable.data.norm(dim=-1).mean().item()
         b_norm = B.final_variable.data.norm(dim=-1).mean().item()
+        print("Norm:", a_norm, b_norm)
 
         idxs = list(range(A.final_variable.data.ndim))[1:]
         a_matrix_norm = A.final_variable.data.norm(dim=idxs).item()

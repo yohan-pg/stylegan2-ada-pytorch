@@ -3,6 +3,8 @@ from .w_variable import *
 
 
 class ZVariable(Variable):
+    space_name = "Zw"
+    
     @classmethod
     def sample_from(cls, G: nn.Module, batch_size: int = 1):
         return cls(

@@ -4,7 +4,8 @@ python train.py \
     --data=./datasets/afhq256cat.zip \
     --batch 8 \
     --gamma 10 \
-    --gpus=1 \
+    --gpus=2 \
+    --fp32 True \
     --outdir="./training-runs/$1" \
     "${@:2}"
 

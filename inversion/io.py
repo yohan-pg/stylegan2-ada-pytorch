@@ -2,6 +2,11 @@ from .prelude import *
 from .variables import *
 
 import pickle
+import shutil
+
+
+from training.dataset import ImageFolderDataset
+import training.networks as networks
 
 # todo move this into a class which opens G than has IO methods?
 
@@ -90,8 +95,62 @@ def save_frame(G, outdir: str, target_uint8: list, projected_w_steps: list):
 
 def latest_snapshot(name: str) -> Optional[str]:
     run_path = sorted(os.listdir(f"training-runs/{name}"))[-1]
-    snapshot_path = sorted([
-        path for path in os.listdir(f"training-runs/{name}/{run_path}")
-        if path.startswith("network-snapshot")
-    ])[-1]
+    snapshot_path = sorted(
+        [
+            path
+            for path in os.listdir(f"training-runs/{name}/{run_path}")
+            if path.startswith("network-snapshot")
+        ]
+    )[-1]
     return f"training-runs/{name}/{run_path}/{snapshot_path}"
+
+
+def fresh_dir(path):
+    if os.path.exists(path):
+        shutil.rmtree(path)
+    os.makedirs(path)
+
+
+class InversionDataloader:
+    pass
+
+
+@dataclass(eq=False)
+class RealDataloader(InversionDataloader):
+    name = "real"
+
+    dataset_path: str
+    batch_size: int
+    num_images: int
+
+    def __post_init__(self):
+        self.dataset = ImageFolderDataset(self.dataset_path)
+
+    def __iter__(self):
+        subset = torch.utils.data.Subset(
+            self.dataset, torch.randperm(len(self.dataset))[: self.num_images]
+        )
+        inner_loader = torch.utils.data.DataLoader(
+            subset, batch_size=self.batch_size, shuffle=True
+        )
+
+        def loader_transform():
+            for img, _ in inner_loader:
+                yield img.cuda() / 255
+
+        return loader_transform()
+
+@dataclass(eq=False)
+class FakeDataloader(InversionDataloader):
+    name = "fake"
+
+    G: networks.Generator
+    batch_size: int
+    num_images: int
+
+    def __iter__(self):
+        for _ in range(self.num_images):
+            with torch.no_grad():
+                image = ZVariable.sample_from(self.G, self.batch_size).to_image()
+            yield image
+
