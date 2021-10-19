@@ -12,11 +12,12 @@ class Interpolation:
 
     def save(self, out_path: str, target_A=None, target_B=None) -> None:
         grid = self.grid()
-        if target_A:
-            grid.prepend(target_A)
-        if target_B:
-            grid.prepend(target_B)
-        save_image(self.grid(), out_path, nrow=len(self.frames[0]))
+        if target_A is not None:
+            grid = torch.cat([target_A] + [x.unsqueeze(0) for x in grid])
+        if target_B is not None:
+            grid = torch.cat([x.unsqueeze(0) for x in grid] + [target_B])
+        batch_size = len(self.frames[0])
+        save_image(grid, out_path, nrow=100 if batch_size == 1 else batch_size)
 
     def ppl(self, criterion) -> float:
         total = 0.0

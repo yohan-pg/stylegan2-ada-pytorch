@@ -3,19 +3,24 @@ from .w_variable import *
 
 
 class ZVariable(Variable):
-    space_name = "Zw"
+    space_name = "Z"
+    default_lr = 0.03
     
     @classmethod
-    def sample_from(cls, G: nn.Module, batch_size: int = 1):
+    def sample_from(cls, G: nn.Module, batch_size: int = 1, init_scale = 1.0):
         return cls(
             G,
             nn.Parameter(
                 (
-                    torch.randn(batch_size, G.num_required_vectors(), G.z_dim).cuda()
-                ).squeeze(1)
-            ),
+                    torch.randn(batch_size, G.num_required_vectors(), G.z_dim).cuda() 
+                ).squeeze(1) * init_scale
+            ) ,
         )
 
+    @classmethod
+    def sample_random_from(cls, G: nn.Module, *args, **kwargs):
+        return cls.sample_from(G, *args, **kwargs)
+        
     def interpolate(self, other: "ZVariable", alpha: float) -> Variable:
         assert self.G == other.G
 
@@ -36,7 +41,7 @@ class ZVariable(Variable):
         return self.__class__(
             self.G[0],
             slerp(
-                self.data,
+                self.data.clone(),
                 other.data,
                 alpha,
             ),
@@ -46,14 +51,7 @@ class ZVariable(Variable):
         return WVariable(self.G[0], self.to_styles()[:, :self.G[0].num_required_vectors()])
 
     def interpolate_in_W(self, other: "ZVariable", alpha: float) -> Variable:
-        return WVariable(
-            self.G[0],
-            lerp(
-                self.to_styles()[:, : self.G[0].num_required_vectors()],
-                other.to_styles()[:, : self.G[0].num_required_vectors()],
-                alpha,
-            ),
-        )
+        return self.to_W().interpolate(other.to_W(), alpha)
 
     def to_styles(self):
         return self.G[0].mapping(self.data, None)

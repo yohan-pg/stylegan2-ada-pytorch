@@ -16,6 +16,23 @@ class _WPlusVariable(ABC):
             ),
         )
 
+    @classmethod
+    def sample_random_from(cls, G: nn.Module, batch_size: int = 1):
+        data = G.mapping(
+            (
+                torch.randn(batch_size, G.num_required_vectors(), G.z_dim)
+                .squeeze(1)
+                .cuda()
+            ),
+            None,
+            skip_w_avg_update=True,
+        )
+
+        return cls(
+            G,
+            nn.Parameter(data),
+        )
+
     def to_styles(self) -> Styles:
         return self.data
 
@@ -35,7 +52,8 @@ class _ZPlusVariable:
                 torch.zeros(batch_size, G.num_required_vectors() * G.num_ws, G.w_dim).cuda()
             ),
         )
-
+        
+        
     def to_styles(self):
         n = self.G[0].num_required_vectors()
         return torch.cat(

@@ -114,6 +114,7 @@ def modulated_conv2d(
             w = w * styles[:, : w.shape[1], : w.shape[2]].unsqueeze(3).unsqueeze(4)
         else:
             w = w * styles.reshape(batch_size, 1, -1, 1, 1)  # [NOIkk]
+            
     if demodulate:
         dcoefs = (w.square().sum(dim=[2, 3, 4]) + 1e-8).rsqrt()  # [NO]
     if demodulate and fused_modconv:
@@ -277,11 +278,11 @@ class MappingNetwork(torch.nn.Module):
         if num_ws is not None and w_avg_beta is not None:
             self.register_buffer("w_avg", torch.zeros([w_dim]))
 
-    # def parameters(self):
-    #     if self.freeze_mapper:
-    #         return []
-    #     else:
-    #         return super().parameters()
+    def parameters(self, *args, **kwargs):
+        if self.freeze_mapper:
+            return []
+        else:
+            return super().parameters(*args, **kwargs)
 
     def _forward(
         self, z, c, truncation_psi=1, truncation_cutoff=None, skip_w_avg_update=False
@@ -340,8 +341,7 @@ class MappingNetwork(torch.nn.Module):
         assert self.num_ws is not None
 
         with torch.autograd.profiler.record_function("broadcast"):
-            if not self.sample_w_plus and not self.use_adaconv:
-                assert z.ndim == 2
+            if not self.use_adaconv:
                 return (
                     self._forward(z, c, **kwargs)
                     .unsqueeze(1)
@@ -349,9 +349,6 @@ class MappingNetwork(torch.nn.Module):
                 )
             else:
                 num_vectors = self.num_required_vectors()
-                assert z.ndim == 3
-                assert z.shape[1] == num_vectors
-                assert z.shape[2] == self.z_dim
                 return (
                     self._forward(
                         z.reshape(z.shape[0] * num_vectors, self.z_dim), c, **kwargs
@@ -400,7 +397,7 @@ class SynthesisLayer(torch.nn.Module):
         self.act_gain = bias_act.activation_funcs[activation].def_gain
         self.use_adaconv = use_adaconv
         self.freeze_affine = freeze_affine
-        self.affine = FullyConnectedLayer(w_dim, in_channels, bias_init=1) 
+        self.affine = FullyConnectedLayer(w_dim, in_channels, bias_init=1)
 
         memory_format = (
             torch.channels_last if channels_last else torch.contiguous_format
@@ -415,14 +412,14 @@ class SynthesisLayer(torch.nn.Module):
             self.noise_strength = torch.nn.Parameter(torch.zeros([]))
 
         self.bias = torch.nn.Parameter(torch.zeros([out_channels]))
-    #!!!
-    # def parameters(self):
-    #     params = set(super().parameters())
+    
+    def parameters(self, *args, **kwargs):
+        params = set(super().parameters(*args, **kwargs))
         
-    #     if self.freeze_affine:
-    #         params.difference_update(set(self.affine.parameters()))
+        if self.freeze_affine:
+            params.difference_update(set(self.affine.parameters(*args, **kwargs)))
         
-    #     return params
+        return params
 
     def forward(self, x, w, noise_mode="random", fused_modconv=True, gain=1):
         assert noise_mode in ["random", "const", "none"]

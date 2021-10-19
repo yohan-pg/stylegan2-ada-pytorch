@@ -122,16 +122,21 @@ class RealDataloader(InversionDataloader):
     dataset_path: str
     batch_size: int
     num_images: int
+    seed: int = 0
 
     def __post_init__(self):
-        self.dataset = ImageFolderDataset(self.dataset_path)
+        torch.manual_seed(self.seed)
+        dataset = ImageFolderDataset(self.dataset_path)
+        self.dataset = torch.utils.data.Subset(
+            dataset, torch.randperm(len(dataset))[: self.num_images]
+        )
+
+    def __len__(self):
+        return self.num_images
 
     def __iter__(self):
-        subset = torch.utils.data.Subset(
-            self.dataset, torch.randperm(len(self.dataset))[: self.num_images]
-        )
         inner_loader = torch.utils.data.DataLoader(
-            subset, batch_size=self.batch_size, shuffle=True
+            self.dataset, batch_size=self.batch_size, shuffle=False
         )
 
         def loader_transform():
@@ -139,6 +144,7 @@ class RealDataloader(InversionDataloader):
                 yield img.cuda() / 255
 
         return loader_transform()
+
 
 @dataclass(eq=False)
 class FakeDataloader(InversionDataloader):
@@ -154,3 +160,32 @@ class FakeDataloader(InversionDataloader):
                 image = ZVariable.sample_from(self.G, self.batch_size).to_image()
             yield image
 
+
+import itertools
+
+
+def grouper(iterable, n, fillvalue=None):
+    "Collect data into non-overlapping fixed-length chunks or blocks"
+    args = [iter(iterable)] * n
+    return itertools.zip_longest(*args, fillvalue=fillvalue)
+
+
+class InvertedDataloader:
+    def __init__(self, target_dataloader: InversionDataloader, inverter):
+        self.inversions = []
+        self.inverter = inverter
+        self.target_dataloader = target_dataloader
+
+        for target in tqdm.tqdm(target_dataloader):
+            inversion = inverter(target).purge()
+            inversion.rerun = inverter(target).purge()
+            self.inversions.append(inversion)
+
+        self.num_images = self.target_dataloader.num_images
+
+    def __len__(self):
+        return len(self.target_dataloader)
+
+    def __iter__(self):
+        for i, _ in enumerate(self.target_dataloader):
+            yield self.inversions[i]

@@ -27,6 +27,7 @@ class ZVariableInitAtMean(ZVariable):
         )
 
 
+
 class ZVariableInitAtMeanWithNoise(ZVariableInitAtMean):
     noise_level = 1.0 
 

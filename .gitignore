@@ -1,6 +1,7 @@
 __pycache__/
 .cache/
 
+/eval/
 /datasets/
 /training-runs/
 /stylegan2/

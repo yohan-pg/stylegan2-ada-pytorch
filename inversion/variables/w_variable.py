@@ -6,43 +6,63 @@ def lerp(a, b, alpha):
 
 
 class WVariable(Variable):
-    init_at_mean = True
     space_name = "W"
+    default_lr = 0.1
 
     @classmethod
-    def sample_from(cls, G: nn.Module, batch_size: int = 1, avg_samples=2_000):
-        if cls.init_at_mean:
-            data = G.mapping(
-                (
-                    torch.zeros(batch_size, G.num_required_vectors(), G.z_dim)
-                    .squeeze(1)
-                    .cuda()
-                ),
-                None,
-                skip_w_avg_update=True,
-            )[:, : G.num_required_vectors(), :]
-            with torch.no_grad():
-                # * Updates G.mapping.w_avg with a large number of samples
-                temp_beta = G.mapping.w_avg_beta
-                temp_adaconv = G.mapping.sample_for_adaconv
+    def sample_from(cls, G: nn.Module, batch_size: int = 1, avg_samples=10_000):
+        # data = G.mapping(
+        #     (
+        #         torch.zeros(batch_size, G.num_required_vectors(), G.z_dim)
+        #         .squeeze(1)
+        #         .cuda()
+        #     ),
+        #     None,
+        #     skip_w_avg_update=True,
+        # )[:, : G.num_required_vectors(), :]
 
-                G.mapping.sample_for_adaconv = False
-                G.mapping.w_avg_beta = 0.0
-                G.mapping(torch.randn(avg_samples, G.z_dim).cuda(), None)
+        # with torch.no_grad():
+        #     # * Updates G.mapping.w_avg with a large number of samples
+        #     key = (
+        #         "use_adaconv"
+        #         if hasattr(G.mapping, "use_adaconv")
+        #         else "sample_for_adaconv"
+        #     )
 
-                G.mapping.w_avg_beta = temp_beta
-                G.mapping.sample_for_adaconv = temp_adaconv
-        else:
-            data = G.mapping(
-                (
-                    torch.randn(batch_size, G.num_required_vectors(), G.z_dim)
-                    .squeeze(1)
-                    .cuda()
-                ),
-                None,
-                skip_w_avg_update=True,
-            )[:, : G.num_required_vectors(), :]
-            mean = None
+        #     temp_beta = G.mapping.w_avg_beta
+        #     temp_adaconv = getattr(G.mapping, key)
+
+        #     setattr(G.mapping, key, False)
+        #     G.mapping.w_avg_beta = 0.0
+        #     G.mapping(torch.randn(avg_samples, G.z_dim).cuda(), None)
+
+        #     G.mapping.w_avg_beta = temp_beta
+        #     setattr(G.mapping, key, temp_adaconv)
+
+        data = G.mapping.w_avg.reshape(1, 1, G.w_dim).repeat(
+            batch_size, G.num_required_vectors(), 1
+        )
+
+        return cls(
+            G,
+            nn.Parameter(data),
+        )
+
+    def to_W(self):
+        return self
+
+    @classmethod
+    def sample_random_from(cls, G: nn.Module, batch_size: int = 1, **kwargs):
+        data = G.mapping(
+            (
+                torch.randn(batch_size, G.num_required_vectors(), G.z_dim)
+                .squeeze(1)
+                .cuda()
+            ),
+            None,
+            skip_w_avg_update=True,
+            **kwargs
+        )[:, : G.num_required_vectors(), :]
 
         return cls(
             G,
@@ -56,14 +76,30 @@ class WVariable(Variable):
     def to_styles(self) -> Styles:
         data = self.data
 
-        if self.init_at_mean:
-            G = self.G[0]
-            mean = G.mapping.w_avg.reshape(1, 1, G.w_dim).repeat(
-                len(data), G.num_required_vectors(), 1
-            )
-            data = data + mean
+        # if self.init_at_mean:
+        #     G = self.G[0]
+        #     mean = G.mapping.w_avg.reshape(1, 1, G.w_dim).repeat(
+        #         len(data), G.num_required_vectors(), 1
+        #     )
+        #     data = data + mean
 
         return data.repeat(1, self.G[0].num_ws, 1)
+
+class WVariableCenterAtMean():
+    @classmethod
+    def sample_from(cls, G: nn.Module, *args, **kwargs):
+        var = WVariable.sample_from(G, *args, **kwargs)
+        with torch.no_grad():
+            var.data *= 0
+        return var
+
+    def to_styles(self) -> Styles:
+        G = self.G[0]
+        mean = G.mapping.w_avg.reshape(1, 1, G.w_dim).repeat(
+            len(self.data), G.num_required_vectors(), 1
+        )
+
+        return (self.data + mean).repeat(1, self.G[0].num_ws, 1)
 
 
 class WVariableWithNoise(WVariable):
@@ -77,7 +113,7 @@ class WVariableWithNoise(WVariable):
 
 class WVariableEarlyLayers(WVariable):
     num_layers = 10
-
+    
     def to_styles(self) -> Styles:
         styles = super().to_styles()
         mean = WVariable.sample_from(self.G[0], len(self.data)).data.repeat(

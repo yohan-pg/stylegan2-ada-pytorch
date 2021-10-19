@@ -14,6 +14,7 @@ import torch.nn.functional as F
 import math
 import dnnlib
 import legacy
+from xml.dom import minidom
 
 from torchvision.utils import save_image, make_grid
 from interpolator import interpolate_images
@@ -23,7 +24,9 @@ from abc import ABC, abstractmethod, abstractstaticmethod, abstractclassmethod
 from dataclasses import dataclass
 
 from typing import Optional, Type, List, final, Tuple, Callable, Iterator, Iterable, Dict, ClassVar
+import matplotlib.pyplot as plt 
 
+from torchvision.io import write_video
 
 ImageTensor = torch.Tensor # [B, C, H, W] with data between 0 and 1
 

@@ -13,9 +13,20 @@ class Variable(ToStyles, ABC, nn.Module):
             assert data.ndim == 2
             assert data.shape[1] == G.w_dim
         self.data = data
+
+    def from_data(self, data):
+        return self.__class__(self.G[0], data)
+
+    @staticmethod
+    def from_variable(self, variable):
+        return self.__class__(Variable.G[0], variable.data)
     
     @abstractclassmethod
     def sample_from(cls, G: nn.Module, batch_size: int = 1):
+        raise NotImplementedError
+
+    @abstractclassmethod
+    def sample_random_from(cls, G: nn.Module, batch_size: int = 1):
         raise NotImplementedError
 
     @abstractmethod
@@ -35,6 +46,19 @@ class Variable(ToStyles, ABC, nn.Module):
             self.data + data
         )
 
+    def direction_to(self, other):
+        diff = other.data - self.data
+        return self.from_data(diff / diff.norm(dim=-1, keepdim=True))
+
+    def __add__(self, other: "Variable"):
+        return self.from_data(self.data + other.data)
+
+    def __sub__(self, other: "Variable"):
+        return self.from_data(self.data - other.data)
+
+    def __mul__(self, scalar: float):
+        return self.from_data(self.data * scalar)
+
     def norm(self):
         return self.data.norm(dim=(1, 2))
 
@@ -49,3 +73,4 @@ class Variable(ToStyles, ABC, nn.Module):
 
     def split_into_individual_variables(self):
         return [self.__class__(self.G[0], p.unsqueeze(0)) for p in self.data]
+    

@@ -3,6 +3,8 @@ from .variables import *
 from .criterions import *
 from .jittering import *
 from .io import *
+from .inversion import * 
+
 import training.networks as networks
 
 import matplotlib.pyplot as plt
@@ -15,12 +17,16 @@ class Inverter:
     variable_type: Type[Variable]
     criterion: InversionCriterion = VGGCriterion()
     learning_rate: float = 0.1
-    beta_1: float = 0.0
-    beta_2: float = 0.0
+    beta_1: float = 0.9
+    beta_2: float = 0.999
     constraints: List[OptimizationConstraint] = None
-    snapshot_frequency: int = 10
+    snapshot_frequency: int = 50
+    seed: Optional[int] = 0
 
     def __call__(self, target, out_path=None):
+        if self.seed is not None:
+            torch.manual_seed(self.seed)
+
         return invert(
             self.G,
             target=target,
@@ -30,7 +36,7 @@ class Inverter:
             criterion=self.criterion,
             snapshot_frequency=self.snapshot_frequency,
             optimizer_constructor=lambda params: torch.optim.Adam(
-                params, lr=self.learning_rate, betas=(self.beta_1, self.beta_2)
+                params, lr=self.learning_rate, betas=(self.beta_1, self.beta_2),
             ),
             constraints=[],
         )
@@ -69,12 +75,12 @@ def invert(
                 fine_tune_G,
             )
         ):
-            losses.append(loss.item())
+            losses.append(loss)
 
-            if i % snapshot_frequency == 0:
+            if i % snapshot_frequency == 0: # todo or we are in the last iter
                 variables.append(variable.copy())
                 preds.append(pred)
-                if out_path is not None:  # todo clean up, move elsewhere
+                if out_path is not None: # todo clean up, move elsewhere
                     snapshot(pred, target, out_path)
     except KeyboardInterrupt:
         pass
@@ -97,7 +103,7 @@ def inversion_loop(
         + (list(G.synthesis.parameters()) if fine_tune_G else [])
     )
 
-    for step in tqdm.tqdm(range(num_steps + 1)):
+    for step in range(num_steps + 1):
         t = step / num_steps
 
         for constraint in constraints:
@@ -105,71 +111,13 @@ def inversion_loop(
 
         styles = variable.to_styles()
         pred = variable.styles_to_image(styles)
-        loss = criterion(pred, target)
+        losses = criterion(pred, target)
         optimizer.zero_grad()
-        loss.backward()
+        losses.mean().backward()
         optimizer.step()
 
-        yield loss, pred
+        yield losses.detach(), pred.detach()
 
 
 def snapshot(pred, target, out_path):
-    save_image(torch.cat((target, pred, (target - pred).abs())), out_path)
-
-
-class Inversion:
-    def __init__(
-        self,
-        target: nn.Module,
-        variables: List[Variable],
-        losses: List[float],
-        preds: List[torch.Tensor],
-    ):
-        self.variables = variables
-        self.target = target
-        self.losses = losses
-        self.preds = preds
-
-        for var in self.variables:
-            var.eval()
-
-        self.final_variable = self.variables[-1]
-        self.final_pred = self.preds[-1]
-
-    @staticmethod
-    def save_losses_plot(inversions: List["Inversion"], out_path: str) -> None:
-        plt.figure()
-        plt.title("Reconstruction loss per step")
-
-        for name, inversion in reversed(inversions.items()):
-            plt.plot(inversion.losses, label=name)
-        plt.legend()
-
-        plt.ylim(0, 0.5)
-        plt.xlabel("Optimization steps")
-        plt.ylabel("Reconstruction loss")
-        plt.savefig(out_path)
-
-    def save_optim_trace(self, out_path: str) -> None:
-        save_image(torch.cat(self.preds), out_path)
-
-    def save_to_video(self, outdir: str):
-        raise NotImplementedError
-        video = imageio.get_writer(
-            f"{outdir}/proj.mp4", mode="I", fps=10, codec="libx264", bitrate="16M"
-        )
-        print(f'Saving optimization progress video "{outdir}/proj.mp4"')
-        for variable in self.variables:
-            synth_image = G.synthesis(variable.to_styles(), noise_mode="const")
-            synth_image = (synth_image + 1) * (255 / 2)
-            synth_image = (
-                synth_image.permute(0, 2, 3, 1)
-                .clamp(0, 255)
-                .to(torch.uint8)[0]
-                .cpu()
-                .numpy()
-            )
-            video.append_data(
-                np.concatenate([target, torch.Tensor, synth_image], axis=1)
-            )
-        video.close()
+    save_image(torch.cat((target, pred, (target - pred).abs())), out_path, nrow = (3 if len(pred) == 1 else len(pred)))
