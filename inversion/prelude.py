@@ -21,7 +21,7 @@ from interpolator import interpolate_images
 from training.networks import normalize_2nd_moment
 
 from abc import ABC, abstractmethod, abstractstaticmethod, abstractclassmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from typing import Optional, Type, List, final, Tuple, Callable, Iterator, Iterable, Dict, ClassVar
 import matplotlib.pyplot as plt 

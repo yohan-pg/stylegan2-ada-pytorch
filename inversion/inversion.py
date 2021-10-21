@@ -37,12 +37,20 @@ class Inversion:
         plt.ylabel("Reconstruction loss")
         plt.savefig(out_path)
 
+    def move_to_cuda(self):
+        self.final_pred = self.final_pred.cuda()
+        self.final_variable = self.final_variable.cuda()
+
+    def move_to_cpu(self):
+        self.final_pred = self.final_pred.cpu()
+        self.final_variable = self.final_variable.cpu()
+
     def save_optim_trace(self, out_path: str) -> None:
         save_image(torch.cat(self.preds), out_path)
 
     def purge(self):
         self = copy.copy(self)
-        # todo create another class instead 
+        
         del self.preds 
         del self.variables
         self.final_pred = self.final_pred.cpu()

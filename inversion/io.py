@@ -188,4 +188,9 @@ class InvertedDataloader:
 
     def __iter__(self):
         for i, _ in enumerate(self.target_dataloader):
-            yield self.inversions[i]
+            inversion = self.inversions[i]
+            inversion.move_to_cuda()
+            inversion.rerun.move_to_cuda()
+            yield inversion
+            inversion.move_to_cuda()
+            inversion.rerun.move_to_cuda()

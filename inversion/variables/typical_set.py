@@ -30,10 +30,12 @@ class ZVariableClampToTypicalSet(ZVariableInitAtMean):
 
         return super().to_styles()
 
-    
-    def interpolate(self, other: "ZVariableClampToTypicalSet", alpha: float) -> Variable:
-        assert ZVariable.from_variable(self).interpolate(ZVariable.from_variable(other), alpha)
-
+    def interpolate(
+        self, other: "ZVariableClampToTypicalSet", alpha: float
+    ) -> Variable:
+        assert ZVariable.from_variable(self).interpolate(
+            ZVariable.from_variable(other), alpha
+        )
 
 
 class ZVariableConstrainToTypicalSetAllVecs(ZVariable):
@@ -41,11 +43,20 @@ class ZVariableConstrainToTypicalSetAllVecs(ZVariable):
 
     def to_styles(self) -> Styles:
         norm = self.data.norm(dim=(1, 2), keepdim=True)
-        target = math.sqrt(self.data.shape[1]) * math.sqrt(self.data.shape[2]) * self.truncation_factor
+        target = (
+            math.sqrt(self.data.shape[1])
+            * math.sqrt(self.data.shape[2])
+            * self.truncation_factor
+        )
 
         with torch.no_grad():
-            self.data.copy_(
-                self.data / (norm + 1e-8) * target 
-            )
+            self.data.copy_(self.data / (norm + 1e-8) * target)
 
         return super().to_styles()
+
+
+def ZVariableClamped(amount):
+    class ZVariableClamped(ZVariableInitAtMean):
+        def to_styles(self) -> Styles:
+            return super().to_styles().clamp(min=-amount, max=amount)
+    return ZVariableClamped

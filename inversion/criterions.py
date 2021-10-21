@@ -9,10 +9,8 @@ class InversionCriterion(nn.Module):
 
 
 class VGGCriterion(InversionCriterion):
-    def __init__(self, on_crop: bool = False):
+    def __init__(self):
         super().__init__()
-
-        self.on_crop = on_crop
 
         with dnnlib.util.open_url(
             "https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/metrics/vgg16.pt"
@@ -30,14 +28,6 @@ class VGGCriterion(InversionCriterion):
         return self.vgg16(x.clone() * 255, resize_images=False, return_lpips=True)
 
     def forward(self, pred: ImageTensor, target: ImageTensor):
-        if self.on_crop:
-            pred_crop = TF.CenterCrop(128)(pred)
-            target_crop = TF.CenterCrop(128)(target)
-            return (
-                (self.extract_features(pred) - self.extract_features(target)).square().sum().sum(dim=1)
-            ) * 0.2 + (
-                self.extract_features(pred_crop) - self.extract_features(target_crop)
-            ).square().sum()
         return (
             (self.extract_features(pred) - self.extract_features(target)).square().sum(dim=1)
         ) 

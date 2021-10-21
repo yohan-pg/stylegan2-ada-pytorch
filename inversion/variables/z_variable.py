@@ -14,7 +14,7 @@ class ZVariable(Variable):
                 (
                     torch.randn(batch_size, G.num_required_vectors(), G.z_dim).cuda() 
                 ).squeeze(1) * init_scale
-            ) ,
+            )
         )
 
     @classmethod
@@ -57,14 +57,15 @@ class ZVariable(Variable):
         return self.G[0].mapping(self.data, None)
 
 
-class ZVariableWithNoise(ZVariable):
-    noise_gain = 0.1
-    def to_styles(self):
-        return self.G[0].mapping(self.data * torch.randn_like(self.data) * self.noise_gain, None)
-
+def make_ZVariableWithNoise(amount):
+    class ZVariableWithNoise(ZVariable):
+        noise_gain = amount
+        def to_styles(self):
+            return self.G[0].mapping(self.data + torch.randn_like(self.data) * self.noise_gain, None)
+    return ZVariableWithNoise
 
 class ZSkipVariable(ZVariable):
     interpolate = WVariable.interpolate 
 
     def to_styles(self):
-        return self.G[0].mapping(self.data, None) +  WVariable.to_styles(self)
+        return self.G[0].mapping(self.data, None) + WVariable.to_styles(self)

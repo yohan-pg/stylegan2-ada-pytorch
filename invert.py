@@ -11,15 +11,15 @@
 from inversion import *
 import shutil
 
-# ? implement PULSE as a comparaison?
 # todo bring back jittering
+# ? implement PULSE as a comparaison?
 # todo bring back LR schedule
 
 DISABLE_NORMALIZE = False
 FORCE_NORMALIZE = False
 FORCE_LERP = False
 SAME_SEED = True  #!!!
-SEQUENTIAL = False
+# SEQUENTIAL = False #! dead code
 FINE_TUNE_G = False
 TRANSFORM_TARGETS = False
 
@@ -40,29 +40,23 @@ TRANSFORM_TARGETS = False
 #     METHOD = "adaconv"
 #     G_PATH = "training-runs/cfg_auto_large_res_no_div_slow_mapper_and_affine/00002-afhq256cat-auto2-gamma10-kimg5000-batch8/network-snapshot-000400.pkl"
 
-VARIABLE_TYPE = ZVariable
-
-ZVariable.init_scale = 0.5
+VARIABLE_TYPE = WPlusVariable
 
 if False:
     METHOD = "adain"
-    G_PATH = "pretrained/adain-256-001200.pkl"
+    # G_PATH = "pretrained/adain-256-001200.pkl"
+    G_PATH = "pretrained/adain-slowdown-halftrain.pkl"
 else:
     METHOD = "adaconv"
     G_PATH = "pretrained/adaconv-slowdown-all.pkl"
     # G_PATH = "pretrained/adaconv-slowdown-all.pkl"
-    
-NUM_STEPS = 300
+
+NUM_STEPS = 500
 CRITERION_TYPE = VGGCriterion
 SNAPSHOT_FREQ = 20
-OPTIMIZER_CTOR = lambda params: torch.optim.Adam(
-    params,
-    lr=VARIABLE_TYPE.default_lr, 
-)
 
 AIM_FOR_FAKE_A = False
 AIM_FOR_FAKE_B = False
-
 
 # TARGET_A_PATH = "./datasets/afhq2/train/cat/flickr_cat_000004.png"
 # TARGET_B_PATH = "./datasets/afhq2/train/cat/flickr_cat_000007.png"
@@ -81,13 +75,10 @@ TARGET_B_PATH = "./datasets/afhq2/train/cat/flickr_cat_000018.png"
 # TARGET_A_PATH = "./datasets/afhq2/test/cat/flickr_cat_000233.png"
 # TARGET_B_PATH = "./datasets/afhq2/train/cat/pixabay_cat_004436.png"
 
-
 # TARGET_A_PATH = "./datasets/afhq2/test/cat/flickr_cat_000233.png"
 # TARGET_B_PATH = "./datasets/afhq2/train/cat/pixabay_cat_004436.png"
 
-
-SEED = 0
-
+SEED = 1
 
 print(VARIABLE_TYPE.__name__)
 OUT_DIR = f"out/invert/{METHOD}/{VARIABLE_TYPE.__name__}"
@@ -122,21 +113,19 @@ if __name__ == "__main__":
 
     criterion = CRITERION_TYPE()
 
-    def invert_target(target: torch.Tensor, name: str, variable: Variable):
-        if SAME_SEED:
-            torch.manual_seed(SEED)
-        return invert(
+    def invert_target(target: torch.Tensor, name: str, variable_type: Variable):
+        for inversion in Inverter(
             G,
-            target=target,
-            variable=variable,
-            out_path=f"{OUT_DIR}/optim_progress_{name}.png",
+            variable_type=variable_type,
             num_steps=NUM_STEPS,
             criterion=criterion,
             snapshot_frequency=SNAPSHOT_FREQ,
-            optimizer_constructor=OPTIMIZER_CTOR,
             fine_tune_G=FINE_TUNE_G,
             constraints=[],
-        )
+            penalties=[],
+            seed=SEED
+        )(target, out_path=f"{OUT_DIR}/optim_progress_{name}.png"): pass
+        return inversion
 
     torch.manual_seed(SEED)
 
@@ -147,13 +136,14 @@ if __name__ == "__main__":
     if TRANSFORM_TARGETS:
         with torch.no_grad():
             target_A = target_A.roll(20, dims=[3])
-
-    A = invert_target(target_A, "A", VARIABLE_TYPE.sample_from(G))
+    
+    A = invert_target(target_A, "A", VARIABLE_TYPE)
 
     B = invert_target(
         target_B,
         "B",
-        A.final_variable.copy() if SEQUENTIAL else VARIABLE_TYPE.sample_from(G),
+        VARIABLE_TYPE
+        # A.final_variable.copy() if SEQUENTIAL else VARIABLE_TYPE.sample_from(G),
     )
 
     Inversion.save_losses_plot(dict(A=A, B=B), f"{OUT_DIR}/losses.png")
