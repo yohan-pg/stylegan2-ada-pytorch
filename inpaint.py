@@ -2,14 +2,15 @@ from inversion import *
 
 # METHOD = "adaconv"
 # G_PATH = f"pretrained/adaconv-256-001200.pkl"
-G_PATH = "pretrained/adain-their-params-003800.pkl"
-# G_PATH = f"pretrained/adaconv-slowdown-all.pkl"
+# G_PATH = "pretrained/adain-their-params-003800.pkl"
+G_PATH = f"pretrained/adaconv-slowdown-all.pkl"
+
 
 def make_mask(x):
     x = x.clone()
     mask = torch.ones_like(x)
     _, _, H, W = x.shape
-    mask[:, :, :, W // 3 : W // 3*2] = 0.0
+    mask[:, :, :, W // 4 : W // 4 * 3] = 0.0
     return mask
 
 
@@ -39,7 +40,9 @@ if __name__ == "__main__":
             return (
                 self.weight
                 * torch.autograd.grad(
-                    self.vgg(pred.clone() * 255, resize_images=False, return_lpips=True).sum(),
+                    self.vgg(
+                        pred.clone() * 255, resize_images=False, return_lpips=True
+                    ).sum(),
                     pred.abs().sum(),
                     variable.data,
                     create_graph=True,
@@ -52,18 +55,24 @@ if __name__ == "__main__":
         def forward(self, x):
             pass
 
+    ZVariable.default_lr /= 2
+    N = 100
     inverter = Inverter(
         G,
-        1000,
-        # make_ZVariableWithNoise(ZVariable.default_lr) if True else ZVariable,
-        WPlusVariable,
-        learning_rate=0.03,
+        200 * N,
+        make_ZVariableConstrainToTypicalSetAllVecsWithNoise(
+            noise=ZVariable.default_lr * 30, truncation=1.0
+        )
+        if True
+        else ZVariable,
         criterion=criterion,
-        # learning_rate=ZVariable.default_lr / 3,
+        learning_rate=ZVariable.default_lr,
         snapshot_frequency=10,
+        step_every_n=N,
+        seed=11
     )
 
-    for inversion in tqdm.tqdm(inverter(target * mask, out_path="out/inpaint.png")):
+    for inversion in tqdm.tqdm(inverter.all_inversion_steps(target * mask)):
         save_image(
             torch.cat(
                 (

@@ -231,10 +231,7 @@ class ImageFolderDataset(Dataset):
                 image = np.array(PIL.Image.open(f))
         if image.ndim == 2:
             image = image[:, :, np.newaxis]  # HW => HWC
-        try:
-            image = image.transpose(2, 0, 1)  # HWC => CHW
-        except:
-            breakpoint()
+        image = image.transpose(2, 0, 1)  # HWC => CHW
         return image
 
     def _load_raw_labels(self):

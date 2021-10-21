@@ -25,6 +25,7 @@ class Inverter:
     penalties: list = field(default_factory=list)
     constraints: list = field(default_factory=list)
     fine_tune_G: bool = False
+    step_every_n: int = 1
             
     def all_inversion_steps(self, target, out_path=None):
         if self.seed is not None:
@@ -42,11 +43,9 @@ class Inverter:
             for i, (loss, pred, variable) in enumerate(self.inversion_loop(target)):
                 losses.append(loss)
 
-                if i % self.snapshot_frequency == 0: # todo or we are in the last iter
+                if (i % self.snapshot_frequency == 0) or (i == self.num_steps - 1):
                     variables.append(variable)
                     preds.append(pred)
-                    if out_path is not None: # todo clean up, move elsewhere
-                        self.snapshot(pred, target, out_path)
 
                 yield Inversion(target, variables, losses, preds)
         except KeyboardInterrupt:
@@ -81,9 +80,11 @@ class Inverter:
             for penalty in self.penalties:
                 cost += penalty(variable, styles, pred, target, loss)
             
-            optimizer.zero_grad()
-            cost.mean().backward()
-            optimizer.step()
+            do_step = (step + 1) % self.step_every_n == 0
+            (cost / self.step_every_n).mean().backward()
+            if do_step:
+                optimizer.step()
+                optimizer.zero_grad()
 
             yield loss.detach(), pred.detach(), variable.copy()
 

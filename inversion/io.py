@@ -134,6 +134,9 @@ class RealDataloader(InversionDataloader):
     def __len__(self):
         return self.num_images
 
+    def subset(self, num_images: int) -> "RealDataloader":
+        return RealDataloader(self.dataset_path, self.batch_size, self.num_images, self.seed)
+
     def __iter__(self):
         inner_loader = torch.utils.data.DataLoader(
             self.dataset, batch_size=self.batch_size, shuffle=False
