@@ -5,22 +5,23 @@ from .w_variable import *
 class ZVariable(Variable):
     space_name = "Z"
     default_lr = 0.03
-    
+
     @classmethod
-    def sample_from(cls, G: nn.Module, batch_size: int = 1, init_scale = 1.0):
+    def sample_from(cls, G: nn.Module, batch_size: int = 1, init_scale=1.0):
         return cls(
             G,
             nn.Parameter(
                 (
-                    torch.randn(batch_size, G.num_required_vectors(), G.z_dim).cuda() 
-                ).squeeze(1) * init_scale
-            )
+                    torch.randn(batch_size, G.num_required_vectors(), G.z_dim).cuda()
+                ).squeeze(1)
+                * init_scale
+            ),
         )
 
     @classmethod
     def sample_random_from(cls, G: nn.Module, *args, **kwargs):
         return cls.sample_from(G, *args, **kwargs)
-        
+
     def interpolate(self, other: "ZVariable", alpha: float) -> Variable:
         assert self.G == other.G
 
@@ -37,7 +38,7 @@ class ZVariable(Variable):
             d = a * torch.cos(p) + c * torch.sin(p)
             d = d / d.norm(dim=-1, keepdim=True)
             return d * ((1.0 - t) * na + t * nb)
-        
+
         return self.__class__(
             self.G[0],
             slerp(
@@ -48,7 +49,9 @@ class ZVariable(Variable):
         )
 
     def to_W(self) -> WVariable:
-        return WVariable(self.G[0], self.to_styles()[:, :self.G[0].num_required_vectors()])
+        return WVariable(
+            self.G[0], self.to_styles()[:, : self.G[0].num_required_vectors()]
+        )
 
     def interpolate_in_W(self, other: "ZVariable", alpha: float) -> Variable:
         return self.to_W().interpolate(other.to_W(), alpha)
@@ -60,59 +63,133 @@ class ZVariable(Variable):
 def make_ZVariableWithNoise(amount):
     class ZVariableWithNoise(ZVariable):
         noise_gain = amount
+
         def to_styles(self):
-            return self.G[0].mapping(self.data + torch.randn_like(self.data) * self.noise_gain, None)
+            return self.G[0].mapping(
+                self.data + torch.randn_like(self.data) * self.noise_gain, None
+            )
+
     return ZVariableWithNoise
 
 
-
-def make_ZVariableWithUniformNoise(amount):
-    class ZVariableWithNoise(ZVariable):
-        noise_gain = amount
-        def to_styles(self):
-            return self.G[0].mapping(self.data + torch.rand_like(self.data) * self.noise_gain, None)
-    return ZVariableWithNoise
-
-
-def make_ZVariableConstrainToTypicalSetAllVecsWithNoise(noise, truncation):
-    class ZVariableWithNoise(ZVariable):
+def make_ZVariableConstrainToTypicalSetWithNoise(noise, truncation):
+    class ZVariableConstrainToTypicalSetWithNoise(ZVariable):
         truncation_factor = truncation
         noise_gain = noise
 
+        def inform(self, exp_sq_avg):
+            self.gradinfo = (exp_sq_avg + 1e-10).sqrt()
+
         def project(self, x):
-            norm = x.norm(dim=(1, 2), keepdim=True)
-            target = (
-                math.sqrt(x.shape[1])
-                * math.sqrt(x.shape[2])
-                * self.truncation_factor
-            )
+            norm = x.norm(dim=-1, keepdim=True)
+            target = math.sqrt(x.shape[-1]) * self.truncation_factor
             return x / (norm + 1e-8) * target
 
         def to_styles(self):
             with torch.no_grad():
                 self.data.copy_(self.project(self.data))
-                
-            return self.G[0].mapping(self.project(self.data + torch.randn_like(self.data) * self.noise_gain), None)
+            if hasattr(self, "gradinfo"):
+                scale = self.gradinfo / self.gradinfo.max()
+                return self.G[0].mapping(
+                    self.project(
+                        self.data
+                        + torch.randn_like(self.data) * self.noise_gain  # * scale
+                    ),
+                    None,
+                )
+            else:
+                return self.G[0].mapping(
+                    self.data,
+                    None,
+                )
+
+        def disable_noise(self):
+            var = ZVariableConstrainToTypicalSetWithNoise.from_variable(self)
+            var.noise_gain = 0.0
+            return var
+
+    return ZVariableConstrainToTypicalSetWithNoise
+
+
+def make_ZVariableConstrainToTypicalSetWithMutatingNoise(noise, truncation):
+    class ZVariableConstrainToTypicalSetWithMutatingNoise(ZVariable):
+        truncation_factor = truncation
+        noise_gain = noise
+
+        def project(self, x):
+            norm = x.norm(dim=-1, keepdim=True)
+            target = math.sqrt(x.shape[-1]) * self.truncation_factor
+            return x / (norm + 1e-8) * target
+
+        def to_styles(self):
+            with torch.no_grad():
+                self.data.copy_(
+                    self.project(
+                        self.data + torch.randn_like(self.data) * self.noise_gain
+                    )
+                )
+            return self.G[0].mapping(
+                self.data,
+                None,
+            )
+
+        def disable_noise(self):
+            var = ZVariableConstrainToTypicalSetWithMutatingNoise.from_variable(self)
+            var.noise_gain = 0.0
+            return var
+
+    return ZVariableConstrainToTypicalSetWithMutatingNoise
+
+
+def make_ZVariableWithUniformNoise(amount):
+    class ZVariableWithNoise(ZVariable):
+        noise_gain = amount
+
+        def to_styles(self):
+            return self.G[0].mapping(
+                self.data + torch.rand_like(self.data) * self.noise_gain, None
+            )
+
     return ZVariableWithNoise
 
 
-def make_ZVariableWithAnthitheticNoise(amount):
-    class make_ZVariableWithAnthitheticNoise(ZVariable):
-        noise_gain = amount
-        noise = None
-        def to_styles(self):
-            if self.noise is None:
-                self.noise = torch.randn_like(self.data) * self.noise_gain
-                return self.G[0].mapping(self.data + self.noise, None)
+def make_ZVariableConstrainToTypicalSetAllVecsWithNoise(noise, truncation):
+    class ZVariableConstrainToTypicalSetAllVecsWithNoise(ZVariable):
+        truncation_factor = truncation
+        noise_gain = noise
+
+        def project(self, x):
+            if x.ndim == 3:
+                norm = x.norm(dim=(1, 2), keepdim=True)
+                target = (
+                    math.sqrt(x.shape[1])
+                    * math.sqrt(x.shape[2])
+                    * self.truncation_factor
+                )
             else:
-                result = self.G[0].mapping(self.data - self.noise, None)
-                self.noise = None
-                return result
-    return make_ZVariableWithAnthitheticNoise
+                norm = x.norm(dim=(1), keepdim=True)
+                target = math.sqrt(x.shape[1]) * self.truncation_factor
+            return x / (norm + 1e-8) * target
+
+        def to_styles(self):
+            with torch.no_grad():
+                self.data.copy_(self.project(self.data))
+
+            return self.G[0].mapping(
+                self.project(self.data + torch.randn_like(self.data) * self.noise_gain),
+                None,
+            )
+
+        def disable_noise(self):
+            var = ZVariableConstrainToTypicalSetAllVecsWithNoise.from_variable(self)
+            var.noise_gain = 0.0
+            return var
+
+    return ZVariableConstrainToTypicalSetAllVecsWithNoise
 
 
 class ZSkipVariable(ZVariable):
-    interpolate = WVariable.interpolate 
+    interpolate = WVariable.interpolate
 
     def to_styles(self):
         return self.G[0].mapping(self.data, None) + WVariable.to_styles(self)

@@ -27,25 +27,29 @@ if __name__ == "__main__":
     D = open_discriminator(G_PATH)
 
     criterion = DownsamplingVGGCriterion(downsample)
+    # criterion = 
     target = open_target(G, "./datasets/afhq2/train/cat/pixabay_cat_004436.png"
     
     # "./datasets/afhq2/train/cat/flickr_cat_000436.png"
     )
     target_low_res = downsample(target)
 
+    N = 50
     inverter = Inverter(
         G,
-        1000,
-        ZVariable,
-        # make_ZVariableWithNoise(ZVariable.default_lr) if True else ZVariable,
+        400 * N,
+        make_ZVariableConstrainToTypicalSetAllVecsWithNoise(
+            noise=ZVariable.default_lr * 50, truncation=1.0
+        )
+        if True
+        else ZVariable,
         criterion=criterion,
-        # make_ZVariableWithNoise(ZVariable.default_lr) if True else ZVariable
-        penalties=[GradientNormPenalty(1e-7, criterion.vgg16)],
-        learning_rate=0.01,
-        snapshot_frequency=10
+        learning_rate=ZVariable.default_lr,
+        snapshot_frequency=50,
+        step_every_n=N,
+        seed=11
     )
-
-    for inversion in inverter(target):
+    for inversion in tqdm.tqdm(inverter.all_inversion_steps(target)):
         target_resampled = upsample(downsample(target))
         pred_resampled = upsample(downsample(inversion.final_pred))
         save_image(

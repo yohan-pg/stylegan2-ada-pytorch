@@ -9,13 +9,16 @@ class InversionCriterion(nn.Module):
 
 
 class VGGCriterion(InversionCriterion):
+    vgg16 = None
+
     def __init__(self):
         super().__init__()
 
-        with dnnlib.util.open_url(
-            "https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/metrics/vgg16.pt"
-        ) as f:
-            self.vgg16 = torch.jit.load(f).eval().cuda()
+        if VGGCriterion.vgg16 is None:
+            with dnnlib.util.open_url(
+                "https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/metrics/vgg16.pt"
+            ) as f:
+                VGGCriterion.vgg16 = torch.jit.load(f).eval().cuda()
 
     # @functools.lru_cache(2) # todo
     def extract_features(self, x):
@@ -29,8 +32,10 @@ class VGGCriterion(InversionCriterion):
 
     def forward(self, pred: ImageTensor, target: ImageTensor):
         return (
-            (self.extract_features(pred) - self.extract_features(target)).square().sum(dim=1)
-        ) 
+            (self.extract_features(pred) - self.extract_features(target))
+            .square()
+            .sum(dim=1)
+        )
         #!? sum not mean?
 
 
@@ -38,7 +43,7 @@ class MaskedVGGCriterion(VGGCriterion):
     def __init__(self, mask):
         super().__init__()
         self.mask = mask
-    
+
     def forward(self, pred: ImageTensor, target: ImageTensor):
         return super().forward(pred * self.mask, target * self.mask)
 
@@ -47,6 +52,18 @@ class DownsamplingVGGCriterion(VGGCriterion):
     def __init__(self, f):
         super().__init__()
         self.f = f
-    
+
     def forward(self, pred: ImageTensor, target: ImageTensor):
         return super().forward(self.f(pred), self.f(target))
+
+
+class VGGCriterionWithNoise(VGGCriterion):
+    def __init__(self, amount=0.01):
+        super().__init__()
+        self.amount = amount
+
+    def forward(self, pred: ImageTensor, target: ImageTensor):
+        return super().forward(
+            pred + torch.randn_like(pred) * self.amount,
+            target + torch.rand_like(target) * self.amount,
+        )

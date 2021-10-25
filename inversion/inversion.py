@@ -50,18 +50,35 @@ class Inversion:
 
     def purge(self):
         self = copy.copy(self)
-        
-        del self.preds 
+
+        del self.preds
         del self.variables
         self.final_pred = self.final_pred.cpu()
         self.final_variable = self.final_variable.cpu()
 
         return self
 
+    def snapshot(self, out_path: str):
+        save_image(
+            torch.cat(
+                (self.target, self.final_pred, (self.target - self.final_pred).abs())
+            ),
+            out_path,
+            nrow=(3 if len(self.final_pred) == 1 else len(self.final_pred)),
+        )
+
     @staticmethod
     def save_to_video(outpath: str, inversions: List["Inversion"]):
         def convert(x):
-            return (x.clamp(min=0, max=1.0) * 255).to(torch.uint8).transpose(1, 3).transpose(1, 2).cpu()
-        joinded_videos = torch.cat([torch.cat(inversion.preds) for inversion in inversions], dim=3)
-        write_video(outpath, convert(joinded_videos), fps=25)
+            return (
+                (x.clamp(min=0, max=1.0) * 255)
+                .to(torch.uint8)
+                .transpose(1, 3)
+                .transpose(1, 2)
+                .cpu()
+            )
 
+        joinded_videos = torch.cat(
+            [torch.cat(inversion.preds) for inversion in inversions], dim=3
+        )
+        write_video(outpath, convert(joinded_videos), fps=25)

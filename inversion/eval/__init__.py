@@ -37,14 +37,14 @@ def run_eval(
 
             for evaluation in evaluations:
                 evaluation(timestamp)(dataloaders)
-
-        join_evaluation_tables(timestamp)
+    
+    return timestamp
 
 
 def create_eval_directory(label: str, dry_run: bool) -> str:
     os.makedirs("eval", exist_ok=True)
 
-    prefix = ("" if label == "" else label + "_")
+    prefix = "" if label == "" else label + "_"
     if dry_run:
         timestamp = prefix + "dry_run"
     else:
@@ -54,6 +54,14 @@ def create_eval_directory(label: str, dry_run: bool) -> str:
     shutil.copyfile(__file__, f"eval/{timestamp}/config.txt")
 
     return timestamp
+
+
+def create_artifacts(
+    timestamp: str, target_dataloader: RealDataloader, evaluations: List[Evaluation]
+) -> None:
+    for evaluation in evaluations:
+        evaluation(timestamp).create_artifacts(target_dataloader)
+    join_evaluation_tables(timestamp)
 
 
 def join_evaluation_tables(timestamp: str) -> None:

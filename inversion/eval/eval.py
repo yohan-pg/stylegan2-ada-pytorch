@@ -22,7 +22,7 @@ class Evaluation:
         raise NotImplementedError
 
     def create_artifacts(
-        self, dataloaders: Dict[str, InvertedDataloader], results: Results
+        self, target_dataloader: RealDataloader, results: Results
     ):
         raise NotImplementedError
 
@@ -41,9 +41,11 @@ class Evaluation:
             with open(f"{self.out_dir}/{experiment_name}/result.pkl", "wb") as file:
                 pickle.dump(results[experiment_name], file)
 
-        self.create_artifacts(dataloaders, results)
-
         return results
+
+    def load_results_from_disk(self) -> Results:
+        for directory in os.listdir(self.out_dir):
+            pass
 
     __call__ = run
 
@@ -55,20 +57,24 @@ class Evaluation:
                 print(f"## {self.name}", file=file)
         
         with open(file_path, "a") as file:
+            max_len_name = max(map(len,results.keys()))
             for experiment_name, result in results.items():
                 print(
-                    f"{experiment_name}: {result['losses'].mean().item():.04f} +- {result['losses'].std().item():.04f}",
+                    f"{experiment_name.ljust(max_len_name + 1, ' ')}: {result['losses'].mean().item():.04f} +- {result['losses'].std().item():.04f}",
                     file=file,
                 )
 
     def make_histogram(self, results):
         plt.figure()
+        
         names = []
         losses = []
         for experiment_name, result in results.items():
             losses.append(result["losses"].cpu().numpy())
             names.append(experiment_name)
+        
         plt.hist(losses)
+        plt.xlim(left=0)
         plt.title(f"{self.name} Loss Distribution")
         plt.legend(names)
         plt.savefig(f"{self.out_dir}/histogram.png")

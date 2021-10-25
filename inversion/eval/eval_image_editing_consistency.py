@@ -8,6 +8,7 @@ class EvalImageEditingConsistency(Evaluation):
 
     alpha: ClassVar[float] = 0.5
 
+    @torch.no_grad()
     def eval(self, experiment_name: str, dataloader: InvertedDataloader) -> Result:
         losses = []
         inverter = dataloader.inverter
@@ -17,26 +18,20 @@ class EvalImageEditingConsistency(Evaluation):
                 inverter.G, batch_size=len(inversion.target)
             )
 
-            first_inversion = inversion
+            edit = (target_2_var - inversion.final_variable) * self.alpha
+            edited_image = (inversion.final_variable + edit).to_image()
 
-            with torch.no_grad():
-                edit = (target_2_var - first_inversion.final_variable) * self.alpha
-                edited_image = (first_inversion.final_variable + edit).to_image()
-
-            second_inversion = inversion.rerun
-
-            with torch.no_grad():
-                unedited_image = (second_inversion.final_variable - edit).to_image()
-                losses.append(inverter.criterion(unedited_image, inversion.target))
+            unedited_image = (inversion.rerun.final_variable - edit).to_image()
+            losses.append(inverter.criterion(unedited_image, inversion.target))
 
             save_image(
                 torch.cat(
                     (
                         target_2_var.to_image(),
                         inversion.target,
-                        first_inversion.final_pred,
+                        inversion.final_pred,
                         edited_image,
-                        second_inversion.final_pred,
+                        inversion.rerun.final_pred,
                         unedited_image,
                     )
                 ),
@@ -44,12 +39,11 @@ class EvalImageEditingConsistency(Evaluation):
                 nrow=len(inversion.target),
             )
 
-        return {
-            "losses": torch.cat(losses)
-        }
+        return {"losses": torch.cat(losses)}
 
     def create_artifacts(
         self, dataloaders: Dict[str, InvertedDataloader], results: Results
     ):
+        results = self.load_results_from_disk()
         self.make_table(results)
         self.make_histogram(results)

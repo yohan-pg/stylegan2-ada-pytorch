@@ -6,6 +6,7 @@ from .eval import *
 class EvalReconstructionQuality(Evaluation):
     name: ClassVar[str] = "Reconstruction Quality"
 
+    @torch.no_grad()
     def eval(self, experiment_name: str, dataloader: InvertedDataloader) -> Result:
         losses = []
 
@@ -21,7 +22,7 @@ class EvalReconstructionQuality(Evaluation):
                     )
                 ),
                 f"{self.out_dir}/{experiment_name}/{i}.png",
-                nrow=len(inversion.final_pred)
+                nrow=len(inversion.final_pred),
             )
 
         return {
@@ -30,18 +31,19 @@ class EvalReconstructionQuality(Evaluation):
         }
 
     def create_artifacts(
-        self, dataloaders: Dict[str, InvertedDataloader], results: Results
+        self, target_dataloader: RealDataloader, 
     ) -> None:
+        results = self.load_results_from_disk()
         self.make_table(results)
-        self.make_plot(dataloaders, results)
+        self.make_plot(target_dataloader, results)
 
     @torch.no_grad()
     def make_plot(
         self,
-        dataloaders: Dict[str, InvertedDataloader],
+        target_dataloader: RealDataloader, 
         results: Results,
     ) -> None:
-        description = f"over {next(iter(dataloaders.values())).num_images} images"
+        description = f"over {target_dataloader.num_images} images"
 
         plt.figure()
         plt.title(f"[min, Q1, median, Q3, max] {description}")
@@ -51,7 +53,7 @@ class EvalReconstructionQuality(Evaluation):
 
         names = []
         for i, (experiment_name, result) in enumerate(results.items()):
-            all_losses = result["losses_per_step"]
+            all_losses = result["losses_per_step"].t()
             names.append(experiment_name)
             low = all_losses.amin(dim=0)
             q1 = all_losses.quantile(0.25, dim=0)

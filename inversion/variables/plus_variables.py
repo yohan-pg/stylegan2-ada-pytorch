@@ -40,6 +40,13 @@ class _WPlusVariable(ABC):
 class WPlusVariable(_WPlusVariable, WVariable):
     pass
 
+def make_WPlusVariableWithNoise(amount):
+    class WPlusVariableWithNoise(WPlusVariable):
+        noise_gain = amount
+    
+        def to_styles(self) -> Styles:
+            return self.data + torch.randn_like(self.data) * self.noise_gain
+    return WPlusVariableWithNoise
 
 class _ZPlusVariable:
     space_name = "Z+"

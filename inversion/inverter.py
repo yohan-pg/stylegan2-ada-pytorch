@@ -27,13 +27,9 @@ class Inverter:
     fine_tune_G: bool = False
     step_every_n: int = 1
             
-    def all_inversion_steps(self, target, out_path=None):
+    def all_inversion_steps(self, target):
         if self.seed is not None:
             torch.manual_seed(self.seed)
-
-        if out_path is not None:
-            directory = os.path.dirname(out_path)
-            os.makedirs(directory, exist_ok=True)
 
         variables = []
         losses = []
@@ -56,9 +52,12 @@ class Inverter:
             pass
         return inversion
 
-    def inversion_loop(self, target) -> List[Tuple[torch.Tensor, torch.Tensor]]:
-        variable = self.variable_type.sample_from(self.G, len(target))
+    def sample_var(self, target):
+        return self.variable_type.sample_from(self.G, len(target))
 
+    def inversion_loop(self, target) -> List[Tuple[torch.Tensor, torch.Tensor]]:
+        variable = self.sample_var(target)
+        
         optimizer = torch.optim.Adam(
             list(variable.parameters())
             + (list(self.G.synthesis.parameters()) if self.fine_tune_G else []),
@@ -85,8 +84,12 @@ class Inverter:
             if do_step:
                 optimizer.step()
                 optimizer.zero_grad()
+            
+            # variable.inform(optimizer.state_dict()['state'][0]['exp_avg_sq'])
 
             yield loss.detach(), pred.detach(), variable.copy()
 
-    def snapshot(self, pred, target, out_path):
-        save_image(torch.cat((target, pred, (target - pred).abs())), out_path, nrow = (3 if len(pred) == 1 else len(pred)))
+
+class CloseInitInverter(Inverter):
+    def sample_var(self, target):
+        return self.variable_type.find_init_point(self.G, target, VGGCriterion())

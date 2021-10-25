@@ -18,7 +18,7 @@ import shutil
 DISABLE_NORMALIZE = False
 FORCE_NORMALIZE = False
 FORCE_LERP = False
-SAME_SEED = True  #!!!
+SAME_SEED = True  
 # SEQUENTIAL = False #! dead code
 FINE_TUNE_G = False
 TRANSFORM_TARGETS = False
@@ -40,7 +40,9 @@ TRANSFORM_TARGETS = False
 #     METHOD = "adaconv"
 #     G_PATH = "training-runs/cfg_auto_large_res_no_div_slow_mapper_and_affine/00002-afhq256cat-auto2-gamma10-kimg5000-batch8/network-snapshot-000400.pkl"
 
-VARIABLE_TYPE = WPlusVariable
+ZVariable.default_lr /= 3 #!!!
+# VARIABLE_TYPE = make_ZVariableConstrainToTypicalSetWithNoise(math.sqrt(2.0 * ZVariable.default_lr), 1.0)
+VARIABLE_TYPE = make_ZVariableConstrainToTypicalSetWithMutatingNoise(math.sqrt(2.0 * ZVariable.default_lr), 1.0)
 
 if False:
     METHOD = "adain"
@@ -51,7 +53,8 @@ else:
     G_PATH = "pretrained/adaconv-slowdown-all.pkl"
     # G_PATH = "pretrained/adaconv-slowdown-all.pkl"
 
-NUM_STEPS = 500
+
+NUM_STEPS = 500 #!
 CRITERION_TYPE = VGGCriterion
 SNAPSHOT_FREQ = 20
 
@@ -78,10 +81,11 @@ TARGET_B_PATH = "./datasets/afhq2/train/cat/flickr_cat_000018.png"
 # TARGET_A_PATH = "./datasets/afhq2/test/cat/flickr_cat_000233.png"
 # TARGET_B_PATH = "./datasets/afhq2/train/cat/pixabay_cat_004436.png"
 
-SEED = 1
+SEED = 0
 
 print(VARIABLE_TYPE.__name__)
 OUT_DIR = f"out/invert/{METHOD}/{VARIABLE_TYPE.__name__}"
+
 
 if __name__ == "__main__":
     fresh_dir(OUT_DIR)
@@ -114,7 +118,7 @@ if __name__ == "__main__":
     criterion = CRITERION_TYPE()
 
     def invert_target(target: torch.Tensor, name: str, variable_type: Variable):
-        for inversion in Inverter(
+        inverter = Inverter(
             G,
             variable_type=variable_type,
             num_steps=NUM_STEPS,
@@ -123,8 +127,12 @@ if __name__ == "__main__":
             fine_tune_G=FINE_TUNE_G,
             constraints=[],
             penalties=[],
-            seed=SEED
-        )(target, out_path=f"{OUT_DIR}/optim_progress_{name}.png"): pass
+            seed=SEED,
+        )
+
+        for inversion in tqdm.tqdm(inverter.all_inversion_steps(target)):
+            inversion.snapshot(f"{OUT_DIR}/optim_progress_{name}.png")
+        
         return inversion
 
     torch.manual_seed(SEED)
@@ -136,7 +144,7 @@ if __name__ == "__main__":
     if TRANSFORM_TARGETS:
         with torch.no_grad():
             target_A = target_A.roll(20, dims=[3])
-    
+
     A = invert_target(target_A, "A", VARIABLE_TYPE)
 
     B = invert_target(
@@ -156,21 +164,24 @@ if __name__ == "__main__":
     A.save_optim_trace(f"{OUT_DIR}/trace_A.png")
     B.save_optim_trace(f"{OUT_DIR}/trace_B.png")
 
-    if VARIABLE_TYPE is WVariable:
-        Interpolation.from_variables(
-            A.final_variable,
-            w_mean,
-        ).save(f"{OUT_DIR}/interpolation_A_to_mean_w.png")
-        Interpolation.from_variables(
-            B.final_variable,
-            w_mean,
-        ).save(f"{OUT_DIR}/interpolation_B_to_mean_w.png")
+    Interpolation.from_variables(
+        A.final_variable.to_W(),
+        w_mean,
+    ).save(f"{OUT_DIR}/interpolation_A_to_mean_w.png")
+    Interpolation.from_variables(
+        B.final_variable.to_W(),
+        w_mean,
+    ).save(f"{OUT_DIR}/interpolation_B_to_mean_w.png")
 
     interpolation = Interpolation.from_variables(
-        A.final_variable, B.final_variable, gain=1.0
+        A.final_variable.disable_noise(), B.final_variable.disable_noise(), gain=1.0
     )
-
     interpolation.save(f"{OUT_DIR}/interpolation_A_to_B.png", target_A, target_B)
+
+    interpolation = Interpolation.from_variables(
+        A.final_variable.to_W(), B.final_variable.to_W(), gain=1.0
+    )
+    interpolation.save(f"{OUT_DIR}/interpolation_A_to_B_on_W.png", target_A, target_B)
 
     latent_distance = interpolation.latent_distance(nn.MSELoss()).item()
 
