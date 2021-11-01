@@ -64,12 +64,13 @@ def setup_training_loop_kwargs(
     # Our options
     sample_w_plus=None,
     use_adaconv=None,
-    freeze_affine=None,
-    freeze_mapper=None,
+    affine_slowdown=None,
+    mapper_slowdown=None,
     div_by_sqrt=None,
     normalize_latent=None,
     use_noise=None,
     inject_in_torgb=None,
+    latent_dim=None
 ):
     args = dnnlib.EasyDict()
 
@@ -242,7 +243,7 @@ def setup_training_loop_kwargs(
             ramp=None,
             map=8,
         ),  # Uses 
-        "stylegan2linear": dict(
+        "stylegan2map1": dict(
             ref_gpus=8,
             kimg=25000,
             mb=32,
@@ -335,20 +336,22 @@ def setup_training_loop_kwargs(
 
     args.G_kwargs = dnnlib.EasyDict(
         class_name="training.networks.Generator",
-        z_dim=512,
-        w_dim=512,
+        z_dim=latent_dim,
+        w_dim=latent_dim,
         mapping_kwargs=dnnlib.EasyDict(),
         synthesis_kwargs=dnnlib.EasyDict(),
     )
     # *
     args.G_kwargs.mapping_kwargs.sample_w_plus = sample_w_plus is True
     args.G_kwargs.use_adaconv = use_adaconv is True
-    args.G_kwargs.mapping_kwargs.freeze_mapper = freeze_mapper is True
-    args.G_kwargs.synthesis_kwargs.freeze_affine = freeze_affine is True
+    args.G_kwargs.mapping_kwargs.mapper_slowdown = mapper_slowdown or 1.0
+    args.G_kwargs.synthesis_kwargs.affine_slowdown = affine_slowdown or 1.0
     args.G_kwargs.mapping_kwargs.div_by_sqrt = div_by_sqrt is True
     args.G_kwargs.mapping_kwargs.normalize_latent = normalize_latent is True
     args.G_kwargs.synthesis_kwargs.use_noise = use_noise is True
     args.G_kwargs.synthesis_kwargs.inject_in_torgb = inject_in_torgb is True
+    args.G_kwargs.z_dim = latent_dim or 512
+    args.G_kwargs.w_dim = latent_dim or 512
 
     args.D_kwargs = dnnlib.EasyDict(
         class_name="training.networks.Discriminator",
@@ -723,7 +726,7 @@ class CommaSeparatedList(click.ParamType):
     "--cfg",
     help="Base config [default: auto]",
     type=click.Choice(
-        ["auto", "stylegan2", "stylegan2map2", "stylegan2linear", "paper256", "paper512", "paper1024", "cifar", "custom", "auto0", "auto1", "auto2"]
+        ["auto", "stylegan2", "stylegan2map2", "stylegan2map1", "paper256", "paper512", "paper1024", "cifar", "custom", "auto0", "auto1", "auto2"]
     ),
 )
 @click.option("--gamma", help="Override R1 gamma", type=float)
@@ -783,12 +786,13 @@ class CommaSeparatedList(click.ParamType):
 # Our (adaconv) options
 @click.option("--sample_w_plus", type=bool, metavar="BOOL")
 @click.option("--use_adaconv", type=bool, metavar="BOOL")
-@click.option("--freeze_mapper", type=bool, metavar="BOOL")
-@click.option("--freeze_affine", type=bool, metavar="BOOL")
+@click.option("--mapper_slowdown", type=float, metavar="FLOAT")
+@click.option("--affine_slowdown", type=float, metavar="FLOAT")
 @click.option("--div_by_sqrt", type=bool, metavar="BOOL")
 @click.option("--normalize_latent", type=bool, metavar="BOOL")
 @click.option("--use_noise", type=bool, metavar="BOOL")
 @click.option("--inject_in_torgb", type=bool, metavar="BOOL")
+@click.option("--latent_dim", type=int, metavar="INT")
 
 def main(ctx, outdir, dry_run, **config_kwargs):
     """Train a GAN using the techniques described in the paper
@@ -870,12 +874,13 @@ def main(ctx, outdir, dry_run, **config_kwargs):
     print(f"---")
     print(f"Use Adaconv:    {args.G_kwargs.use_adaconv}")
     print(f"Sample W+:    {args.G_kwargs.mapping_kwargs.sample_w_plus}")
-    print(f"Freeze Mapper:    {args.G_kwargs.mapping_kwargs.freeze_mapper}")
-    print(f"Freeze Affine:    {args.G_kwargs.synthesis_kwargs.freeze_affine}")
+    print(f"Mapper Slowdown:    {args.G_kwargs.mapping_kwargs.mapper_slowdown}")
+    print(f"Affine Slowdown:    {args.G_kwargs.synthesis_kwargs.affine_slowdown}")
     print(f"Div By Sqrt:    {args.G_kwargs.mapping_kwargs.div_by_sqrt}")
     print(f"Normalize Latent:    {args.G_kwargs.mapping_kwargs.normalize_latent}")
     print(f"Inject In ToRGB:    {args.G_kwargs.synthesis_kwargs.inject_in_torgb}")
     print(f"Use Noise:    {args.G_kwargs.synthesis_kwargs.use_noise}")
+    print(f"Latent Dim:    {args.G_kwargs.w_dim}")
     print()
 
     # Dry run?

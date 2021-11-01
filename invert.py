@@ -23,18 +23,21 @@ SEQUENTIAL = True
 FINE_TUNE_G = False 
 TRANSFORM_TARGETS = False
 
-if False:
-    METHOD = "adain"
-    G_PATH = "training-runs/cfg_auto_large_res_adain/00004-afhq256cat-auto2-gamma10-kimg5000-batch8/network-snapshot-001200.pkl"
-else:
-    METHOD = "adaconv"
-    G_PATH = "training-runs/cfg_auto_large_res_adaconv/00000-afhq256cat-auto2-gamma10-kimg5000-batch8/network-snapshot-001200.pkl"
+# if False:
+#     METHOD = "adain"
+#     G_PATH = "training-runs/cfg_auto_large_res_adain/00004-afhq256cat-auto2-gamma10-kimg5000-batch8/network-snapshot-001200.pkl"
+# else:
+#     METHOD = "adaconv"
+#     G_PATH = "training-runs/cfg_auto_large_res_adaconv/00000-afhq256cat-auto2-gamma10-kimg5000-batch8/network-snapshot-001200.pkl"
 
 # METHOD = "adaconv"
 # G_PATH = "training-runs/cfg_linear_mapper_large_res_adaconv/00000-afhq256cat-auto12-gamma10-kimg5000-batch8/network-snapshot-001200.pkl"
 
 # METHOD = "adaconv"
 # G_PATH = "training-runs/cfg_auto_large_res_adain_frozen_mapper_and_affine/00000-afhq256cat-auto2-gamma10-kimg5000-batch8/network-snapshot-000000.pkl"
+
+G_PATH = latest_snapshot("cfg_auto_large_res_adaconv")
+
 
 NUM_STEPS = 200
 CRITERION_TYPE = VGGCriterion
@@ -56,11 +59,11 @@ AIM_FOR_FAKE_B = False
 # TARGET_A_PATH = "./datasets/afhq2/train/cat/flickr_cat_000004.png"
 # TARGET_B_PATH = "./datasets/afhq2/train/cat/flickr_cat_000007.png"
 
-# TARGET_A_PATH = "./datasets/afhq2/train/dog/flickr_dog_000021.png"
-# TARGET_B_PATH = "./datasets/afhq2/train/dog/flickr_dog_000022.png"
+TARGET_A_PATH = "./datasets/afhq2/train/dog/flickr_dog_000021.png"
+TARGET_B_PATH = "./datasets/afhq2/train/dog/flickr_dog_000022.png"
 
-TARGET_A_PATH = "./datasets/afhq2/train/cat/flickr_cat_000006.png"
-TARGET_B_PATH = "./datasets/afhq2/train/cat/flickr_cat_000018.png"
+# TARGET_A_PATH = "./datasets/afhq2/train/cat/flickr_cat_000006.png"
+# TARGET_B_PATH = "./datasets/afhq2/train/cat/flickr_cat_000018.png"
 # TARGET_B_PATH = "./datasets/afhq2/train/cat/flickr_cat_000006.png"
 
 # TARGET_A_PATH = "datasets/afhq2/train/cat/pixabay_cat_000077.png"
