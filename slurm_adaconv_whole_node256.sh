@@ -13,4 +13,4 @@ source .activate
 date
 nvidia-smi
 
-bash train.sh adaconv_256_gamma_search --use_adaconv True --gpus 4 --gamma 35 --data=./datasets/afhq2_cat256.zip 
+bash train.sh adaconv_256_gamma_search --use_adaconv True --gpus 4 --gamma 30 --data=./datasets/afhq2_cat256.zip
