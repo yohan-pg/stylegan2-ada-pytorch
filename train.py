@@ -72,7 +72,8 @@ def setup_training_loop_kwargs(
     use_noise=None,
     inject_in_torgb=None,
     bias_init=None,
-    latent_dim=None
+    latent_dim=None,
+    pl_weight=None
 ):
     args = dnnlib.EasyDict()
 
@@ -384,7 +385,8 @@ def setup_training_loop_kwargs(
     args.loss_kwargs = dnnlib.EasyDict(
         class_name="training.loss.StyleGAN2Loss",
         r1_gamma=spec.gamma,
-        ppl_power=ppl_power or 0.5
+        ppl_power=ppl_power or 0.5,
+        pl_weight = pl_weight or 2.0 
     )
 
     args.total_kimg = spec.kimg
@@ -798,6 +800,7 @@ class CommaSeparatedList(click.ParamType):
 @click.option("--inject_in_torgb", type=bool, metavar="BOOL")
 @click.option("--bias_init", type=float, metavar="FLOAT")
 @click.option("--latent_dim", type=int, metavar="INT")
+@click.option("--pl_weight", type=float, metavar="FLOAT")
 
 def main(ctx, outdir, dry_run, **config_kwargs):
     """Train a GAN using the techniques described in the paper

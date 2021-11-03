@@ -13,4 +13,4 @@ source .activate
 date
 nvidia-smi
 
-bash train.sh adaconv_256_normal_ppl --use_adaconv True --gpus 4 --gamma 30 --data=./datasets/afhq2_cat256.zip --inject_in_torgb True --normalize_latent True --affine_slowdown 100 --ppl_power 0.0
+bash train.sh adaconv_256_normal_ppl --use_adaconv True --gpus 4 --gamma 30 --data=./datasets/afhq2_cat256.zip --inject_in_torgb True --normalize_latent True --affine_slowdown 100 --ppl_power 0.0 --ppl_weight 1.0
