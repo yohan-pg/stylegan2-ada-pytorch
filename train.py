@@ -65,6 +65,7 @@ def setup_training_loop_kwargs(
     sample_w_plus=None,
     use_adaconv=None,
     affine_slowdown=None,
+    ppl_power=None,
     mapper_slowdown=None,
     div_by_sqrt=None,
     normalize_latent=None,
@@ -381,6 +382,7 @@ def setup_training_loop_kwargs(
     args.loss_kwargs = dnnlib.EasyDict(
         class_name="training.loss.StyleGAN2Loss",
         r1_gamma=spec.gamma,
+        ppl_power=ppl_power or 0.5
     )
 
     args.total_kimg = spec.kimg
@@ -398,7 +400,6 @@ def setup_training_loop_kwargs(
         args.loss_kwargs.pl_weight = 0  # disable path length regularization
         args.loss_kwargs.style_mixing_prob = 0  # disable style mixing
         args.loss_kwargs.r1_gamma = 10 # disable discr gamma
-    
     
     if gamma is not None:
         assert isinstance(gamma, float)
@@ -788,6 +789,7 @@ class CommaSeparatedList(click.ParamType):
 @click.option("--use_adaconv", type=bool, metavar="BOOL")
 @click.option("--mapper_slowdown", type=float, metavar="FLOAT")
 @click.option("--affine_slowdown", type=float, metavar="FLOAT")
+@click.option("--ppl_power", type=float, metavar="FLOAT")
 @click.option("--div_by_sqrt", type=bool, metavar="BOOL")
 @click.option("--normalize_latent", type=bool, metavar="BOOL")
 @click.option("--use_noise", type=bool, metavar="BOOL")
@@ -881,6 +883,7 @@ def main(ctx, outdir, dry_run, **config_kwargs):
     print(f"Inject In ToRGB:    {args.G_kwargs.synthesis_kwargs.inject_in_torgb}")
     print(f"Use Noise:    {args.G_kwargs.synthesis_kwargs.use_noise}")
     print(f"Latent Dim:    {args.G_kwargs.w_dim}")
+    print(f"PPL power:    {args.loss_kwargs.ppl_power}")
     print()
 
     # Dry run?

@@ -481,7 +481,7 @@ class ToRGBLayer(torch.nn.Module):
         self.inject_in_torgb = inject_in_torgb
         if self.inject_in_torgb:
             self.affine = FullyConnectedLayer(w_dim, in_channels, bias_init=1, lr_multiplier=(1 / affine_slowdown)) # todo slowdown
-        memory_format = (ƒ
+        memory_format = (
             torch.channels_last if channels_last else torch.contiguous_format
         )
         self.weight = torch.nn.Parameter(
