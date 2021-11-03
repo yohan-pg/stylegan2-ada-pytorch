@@ -378,6 +378,7 @@ class SynthesisLayer(torch.nn.Module):
         channels_last=False,  # Use channels_last format for the weights?
         use_adaconv=False,
         affine_slowdown=1.0,
+        bias_init=1.0,
     ):
         super().__init__()
         self.resolution = resolution
@@ -392,7 +393,8 @@ class SynthesisLayer(torch.nn.Module):
         self.act_gain = bias_act.activation_funcs[activation].def_gain
         self.use_adaconv = use_adaconv
         self.affine_slowdown = affine_slowdown
-        self.affine = FullyConnectedLayer(w_dim, in_channels, bias_init=1, lr_multiplier=1/self.affine_slowdown)
+        self.bias_init = bias_init
+        self.affine = FullyConnectedLayer(w_dim, in_channels, bias_init=self.bias_init, lr_multiplier=1/self.affine_slowdown)
 
         memory_format = (
             torch.channels_last if channels_last else torch.contiguous_format
@@ -472,6 +474,7 @@ class ToRGBLayer(torch.nn.Module):
         use_adaconv=False,
         inject_in_torgb=False,
         affine_slowdown=1.0,
+        bias_init=1.0,
     ):
         super().__init__()
         self.conv_clamp = conv_clamp
@@ -479,8 +482,11 @@ class ToRGBLayer(torch.nn.Module):
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.inject_in_torgb = inject_in_torgb
+        self.bias_init = bias_init
+        
         if self.inject_in_torgb:
-            self.affine = FullyConnectedLayer(w_dim, in_channels, bias_init=1, lr_multiplier=(1 / affine_slowdown)) # todo slowdown
+            self.affine = FullyConnectedLayer(w_dim, in_channels, bias_init=self.bias_init, lr_multiplier=(1 / affine_slowdown))
+
         memory_format = (
             torch.channels_last if channels_last else torch.contiguous_format
         )
@@ -599,7 +605,8 @@ class SynthesisBlock(torch.nn.Module):
                 channels_last=self.channels_last,
                 use_adaconv=self.use_adaconv,
                 inject_in_torgb=inject_in_torgb,
-                affine_slowdown=layer_kwargs['affine_slowdown']
+                affine_slowdown=layer_kwargs['affine_slowdown'],
+                bias_init=layer_kwargs['bias_init'],
             )
             self.num_torgb += 1
 

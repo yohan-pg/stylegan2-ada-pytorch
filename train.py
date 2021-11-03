@@ -71,6 +71,7 @@ def setup_training_loop_kwargs(
     normalize_latent=None,
     use_noise=None,
     inject_in_torgb=None,
+    bias_init=None,
     latent_dim=None
 ):
     args = dnnlib.EasyDict()
@@ -351,6 +352,7 @@ def setup_training_loop_kwargs(
     args.G_kwargs.mapping_kwargs.normalize_latent = normalize_latent is True
     args.G_kwargs.synthesis_kwargs.use_noise = use_noise is True
     args.G_kwargs.synthesis_kwargs.inject_in_torgb = inject_in_torgb is True
+    args.G_kwargs.synthesis_kwargs.bias_init = bias_init or 1.0
     args.G_kwargs.z_dim = latent_dim or 512
     args.G_kwargs.w_dim = latent_dim or 512
 
@@ -794,6 +796,7 @@ class CommaSeparatedList(click.ParamType):
 @click.option("--normalize_latent", type=bool, metavar="BOOL")
 @click.option("--use_noise", type=bool, metavar="BOOL")
 @click.option("--inject_in_torgb", type=bool, metavar="BOOL")
+@click.option("--bias_init", type=float, metavar="FLOAT")
 @click.option("--latent_dim", type=int, metavar="INT")
 
 def main(ctx, outdir, dry_run, **config_kwargs):
@@ -881,6 +884,7 @@ def main(ctx, outdir, dry_run, **config_kwargs):
     print(f"Div By Sqrt:    {args.G_kwargs.mapping_kwargs.div_by_sqrt}")
     print(f"Normalize Latent:    {args.G_kwargs.mapping_kwargs.normalize_latent}")
     print(f"Inject In ToRGB:    {args.G_kwargs.synthesis_kwargs.inject_in_torgb}")
+    print(f"Bias Init:    {args.G_kwargs.synthesis_kwargs.bias_init}")
     print(f"Use Noise:    {args.G_kwargs.synthesis_kwargs.use_noise}")
     print(f"Latent Dim:    {args.G_kwargs.w_dim}")
     print(f"PPL power:    {args.loss_kwargs.ppl_power}")
