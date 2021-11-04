@@ -221,7 +221,6 @@ def setup_training_loop_kwargs(
             ramp=0.05,
             map=1, 
         ),  # Populated dynamically based on resolution and GPU count.
-
         "custom": dict(
             ref_gpus=-1,
             kimg=25000,
@@ -385,8 +384,8 @@ def setup_training_loop_kwargs(
     args.loss_kwargs = dnnlib.EasyDict(
         class_name="training.loss.StyleGAN2Loss",
         r1_gamma=spec.gamma,
-        ppl_power=ppl_power or 0.5,
-        pl_weight = pl_weight or 2.0 
+        ppl_power=0.5 if ppl_power is None else ppl_power,
+        pl_weight=2.0 if pl_weight is None else pl_weight
     )
 
     args.total_kimg = spec.kimg
@@ -881,6 +880,7 @@ def main(ctx, outdir, dry_run, **config_kwargs):
     print(f"Dataset x-flips:    {args.training_set_kwargs.xflip}")
     print(f"---")
     print(f"Use Adaconv:    {args.G_kwargs.use_adaconv}")
+    print(f"Gamma:    {args.loss_kwargs.r1_gamma}")
     print(f"Sample W+:    {args.G_kwargs.mapping_kwargs.sample_w_plus}")
     print(f"Mapper Slowdown:    {args.G_kwargs.mapping_kwargs.mapper_slowdown}")
     print(f"Affine Slowdown:    {args.G_kwargs.synthesis_kwargs.affine_slowdown}")
@@ -891,6 +891,7 @@ def main(ctx, outdir, dry_run, **config_kwargs):
     print(f"Use Noise:    {args.G_kwargs.synthesis_kwargs.use_noise}")
     print(f"Latent Dim:    {args.G_kwargs.w_dim}")
     print(f"PPL power:    {args.loss_kwargs.ppl_power}")
+    print(f"PL weight:    {args.loss_kwargs.pl_weight}")
     print()
 
     # Dry run?

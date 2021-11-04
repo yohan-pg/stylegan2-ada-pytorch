@@ -59,7 +59,6 @@ class StyleGAN2Loss(Loss):
         with misc.ddp_sync(self.G_mapping, sync):
             ws = self.G_mapping(z, c)
 
-        print(self.pl_weight)
         # *** Style mixing
         if self.style_mixing_prob > 0:
             with torch.autograd.profiler.record_function("style_mixing"):
