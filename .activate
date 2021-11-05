@@ -1,7 +1,24 @@
+# troubleshooting: we need pytorch '1.7.1+cu110' rather than belugas '1.7.1', otherwise we get the error:  UserWarning: 
+# NVIDIA A100-SXM4-40GB with CUDA capability sm_80 is not compatible with the current PyTorch installation.
+
 export DNNLIB_CACHE_DIR="cache"
 export TERMINFO=/usr/share/terminfo
 # * Note that on tch, the device # appears reversed (titan v is 1, titant rtx is 0)
 # module load python
+
 export CUDA_VISIBLE_DEVICES=0,1,2,3
-module load cuda
+
+module load cuda/11.1.1
+# module load gcc/8.4.0 cuda/11.0
+# module load gcc/10.2.0 cuda/11.0
+# module load gcc/10.3.0 cuda/11.0
+
+# module load gcc/9.3.0 cuda/11.1.1
+# module load gcc/8.4.0 cuda/11.1.1
+# module load gcc/10.2.0 cuda/11.1.1
+# module load gcc/10.3.0 cuda/11.1.1
+
 source stylegan2/bin/activate
+
+# beluga version: '1.7.1+cu110'
+# export CXX=g++ 
