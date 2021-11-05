@@ -98,7 +98,7 @@ def modulated_conv2d(
         assert styles.ndim == 3
         misc.assert_shape(styles, [batch_size, None, in_channels])  # [NI]
 
-    assert x.dtype != torch.float16
+    # assert x.dtype != torch.float16
 
     # Calculate per-sample weights and demodulation coefficients.
     w = None

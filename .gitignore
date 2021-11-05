@@ -10,3 +10,4 @@ __pycache__/
 /extensions/
 /cache/
 stylegan2.tar.gz
+/slurm-*.out
