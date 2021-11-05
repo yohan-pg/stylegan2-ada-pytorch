@@ -65,12 +65,15 @@ def setup_training_loop_kwargs(
     sample_w_plus=None,
     use_adaconv=None,
     affine_slowdown=None,
+    ppl_power=None,
     mapper_slowdown=None,
     div_by_sqrt=None,
     normalize_latent=None,
     use_noise=None,
     inject_in_torgb=None,
-    latent_dim=None
+    bias_init=None,
+    latent_dim=None,
+    pl_weight=None
 ):
     args = dnnlib.EasyDict()
 
@@ -218,7 +221,6 @@ def setup_training_loop_kwargs(
             ramp=0.05,
             map=1, 
         ),  # Populated dynamically based on resolution and GPU count.
-
         "custom": dict(
             ref_gpus=-1,
             kimg=25000,
@@ -350,6 +352,7 @@ def setup_training_loop_kwargs(
     args.G_kwargs.mapping_kwargs.normalize_latent = normalize_latent is True
     args.G_kwargs.synthesis_kwargs.use_noise = use_noise is True
     args.G_kwargs.synthesis_kwargs.inject_in_torgb = inject_in_torgb is True
+    args.G_kwargs.synthesis_kwargs.bias_init = bias_init or 1.0
     args.G_kwargs.z_dim = latent_dim or 512
     args.G_kwargs.w_dim = latent_dim or 512
 
@@ -381,6 +384,8 @@ def setup_training_loop_kwargs(
     args.loss_kwargs = dnnlib.EasyDict(
         class_name="training.loss.StyleGAN2Loss",
         r1_gamma=spec.gamma,
+        ppl_power=0.5 if ppl_power is None else ppl_power,
+        pl_weight=2.0 if pl_weight is None else pl_weight
     )
 
     args.total_kimg = spec.kimg
@@ -398,7 +403,6 @@ def setup_training_loop_kwargs(
         args.loss_kwargs.pl_weight = 0  # disable path length regularization
         args.loss_kwargs.style_mixing_prob = 0  # disable style mixing
         args.loss_kwargs.r1_gamma = 10 # disable discr gamma
-    
     
     if gamma is not None:
         assert isinstance(gamma, float)
@@ -788,11 +792,14 @@ class CommaSeparatedList(click.ParamType):
 @click.option("--use_adaconv", type=bool, metavar="BOOL")
 @click.option("--mapper_slowdown", type=float, metavar="FLOAT")
 @click.option("--affine_slowdown", type=float, metavar="FLOAT")
+@click.option("--ppl_power", type=float, metavar="FLOAT")
 @click.option("--div_by_sqrt", type=bool, metavar="BOOL")
 @click.option("--normalize_latent", type=bool, metavar="BOOL")
 @click.option("--use_noise", type=bool, metavar="BOOL")
 @click.option("--inject_in_torgb", type=bool, metavar="BOOL")
+@click.option("--bias_init", type=float, metavar="FLOAT")
 @click.option("--latent_dim", type=int, metavar="INT")
+@click.option("--pl_weight", type=float, metavar="FLOAT")
 
 def main(ctx, outdir, dry_run, **config_kwargs):
     """Train a GAN using the techniques described in the paper
@@ -873,14 +880,18 @@ def main(ctx, outdir, dry_run, **config_kwargs):
     print(f"Dataset x-flips:    {args.training_set_kwargs.xflip}")
     print(f"---")
     print(f"Use Adaconv:    {args.G_kwargs.use_adaconv}")
+    print(f"Gamma:    {args.loss_kwargs.r1_gamma}")
     print(f"Sample W+:    {args.G_kwargs.mapping_kwargs.sample_w_plus}")
     print(f"Mapper Slowdown:    {args.G_kwargs.mapping_kwargs.mapper_slowdown}")
     print(f"Affine Slowdown:    {args.G_kwargs.synthesis_kwargs.affine_slowdown}")
     print(f"Div By Sqrt:    {args.G_kwargs.mapping_kwargs.div_by_sqrt}")
     print(f"Normalize Latent:    {args.G_kwargs.mapping_kwargs.normalize_latent}")
     print(f"Inject In ToRGB:    {args.G_kwargs.synthesis_kwargs.inject_in_torgb}")
+    print(f"Bias Init:    {args.G_kwargs.synthesis_kwargs.bias_init}")
     print(f"Use Noise:    {args.G_kwargs.synthesis_kwargs.use_noise}")
     print(f"Latent Dim:    {args.G_kwargs.w_dim}")
+    print(f"PPL power:    {args.loss_kwargs.ppl_power}")
+    print(f"PL weight:    {args.loss_kwargs.pl_weight}")
     print()
 
     # Dry run?

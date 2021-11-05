@@ -39,6 +39,7 @@ class StyleGAN2Loss(Loss):
         pl_batch_shrink=2,
         pl_decay=0.01,
         pl_weight=2,
+        ppl_power=None,
     ):
         super().__init__()
         self.device = device
@@ -52,6 +53,7 @@ class StyleGAN2Loss(Loss):
         self.pl_decay = pl_decay
         self.pl_weight = pl_weight
         self.pl_mean = torch.zeros([], device=device)
+        self.ppl_power = ppl_power
 
     def run_G(self, z, c, sync):
         with misc.ddp_sync(self.G_mapping, sync):
@@ -137,7 +139,7 @@ class StyleGAN2Loss(Loss):
                             only_inputs=True,
                         )[0]
                     M = self.G_mapping.module if isinstance(self.G_mapping, torch.nn.parallel.DistributedDataParallel) else self.G_mapping
-                    pl_lengths = pl_grads.square().sum(2).mean(1).sqrt() * math.sqrt(M.num_required_vectors())
+                    pl_lengths = pl_grads.square().sum(2).mean(1).sqrt() * M.num_required_vectors()**self.ppl_power
                     pl_mean = self.pl_mean.lerp(pl_lengths.mean(), self.pl_decay)
                     self.pl_mean.copy_(pl_mean.detach())
                     pl_penalty = (pl_lengths - pl_mean).square()
