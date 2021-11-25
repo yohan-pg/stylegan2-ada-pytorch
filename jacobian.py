@@ -33,7 +33,7 @@ from tqdm import tqdm
 
 def measure_jacobian(
     network_pkl: str,
-    untrained=True, 
+    untrained=False, 
     seed: int=0,
 ):
     np.random.seed(seed)
@@ -47,8 +47,8 @@ def measure_jacobian(
 
     if untrained:
         init_kwargs = {**G.init_kwargs}
-        init_kwargs['mapping_kwargs'] = {**init_kwargs['mapping_kwargs']}
-        init_kwargs['mapping_kwargs']['num_layers'] = 8 
+        # init_kwargs['mapping_kwargs'] = {**init_kwargs['mapping_kwargs']}
+        # init_kwargs['mapping_kwargs']['num_layers'] = 8 
         # init_kwargs['mapping_kwargs']['activation'] = "tanh" 
         # init_kwargs['mapping_kwargs']['orthogonal_init'] = True 
         G = networks.Generator(*G.init_args, **init_kwargs).to(device)
@@ -59,7 +59,7 @@ def measure_jacobian(
 
     z = torch.randn(D).cuda()
     def f(z):
-        if isinstance(model, networks.SynthesisNetwork):
+        if model.__class__.__name__ == "SynthesisNetwork":
             return model(z.unsqueeze(0).repeat(1, G.mapping.num_ws, 1))
         else:
             return model(z.unsqueeze(0), None, noise_mode="const")
@@ -90,5 +90,5 @@ def measure_jacobian(
     
 
 if __name__ == "__main__":
-    pickle = "pretrained/stylegan2-car-config-f.pkl"
+    pickle = "pretrained/adain-dropout.pkl"
     measure_jacobian(pickle)

@@ -4,7 +4,8 @@ from training.ops import *
 from torchvision.utils import save_image
 
 METHOD = "adaconv"
-G_PATH=f"training-runs/afhq_adaconv_no_torgb/00005-afhq64cat-auto1-gamma10-kimg5000-batch8/network-snapshot-000800.pkl"
+# G_PATH=f"training-runs/afhq_adaconv_no_torgb/00005-afhq64cat-auto1-gamma10-kimg5000-batch8/network-snapshot-000800.pkl"
+G_PATH="pretrained/tmp.pkl"
 
 OUT_DIR = f"out"
 BATCH_SIZE = 12

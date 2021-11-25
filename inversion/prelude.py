@@ -2,7 +2,8 @@ import copy
 import os
 
 from time import perf_counter
-
+import sys
+import torch.optim as optim
 import tqdm
 import click
 import imageio
@@ -15,6 +16,7 @@ import math
 import dnnlib
 import legacy
 from xml.dom import minidom
+import shutil
 
 from torchvision.utils import save_image, make_grid
 from interpolator import interpolate_images
@@ -37,3 +39,8 @@ class ToStyles(ABC, torch.nn.Module):
 
 
 Styles = torch.Tensor
+
+
+def dbg(x):
+    print(x)
+    return x

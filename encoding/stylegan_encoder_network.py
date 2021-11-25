@@ -26,7 +26,8 @@ class StyleGANEncoderNet(nn.Module):
     NOTE: The encoder takes images with `RGB` color channels and range [-1, 1]
     as inputs, and encode the input images to W+ space of StyleGAN.
     """
-
+    
+    @staticmethod
     def configure_for(G, **kwargs):
         return StyleGANEncoderNet(
             w_space_dim=G.w_dim,
@@ -47,6 +48,7 @@ class StyleGANEncoderNet(nn.Module):
         head_gain: float = 1.0,
         w_plus=True,
         use_bn=True,
+        predict_residual_from_mean=True
     ):
         """Initializes the encoder with basic settings.
         Args:
@@ -122,8 +124,8 @@ class StyleGANEncoderNet(nn.Module):
 
                 if num_style_vectors > 1:
                     self.heads = nn.Sequential(
-                        Splitter(num_style_vectors, w_space_dim, out_channels, head_gain),
-                        nn.ReLU(),
+                        # Splitter(num_style_vectors, w_space_dim, out_channels, head_gain),
+                        # nn.ReLU(),
                         Splitter(num_style_vectors, w_space_dim, out_channels, head_gain),
                     )
                     # self.heads = nn.TransformerEncoder(nn.TransformerEncoderLayer(512, 8, dropout = 0), 4)
@@ -143,7 +145,12 @@ class StyleGANEncoderNet(nn.Module):
             out_channels = min(out_channels * 2, self.encoder_channels_max)
 
         self.downsample = AveragePoolingLayer()
-        self.init_mean = None
+        self.predict_residual_from_mean = predict_residual_from_mean
+
+        if self.predict_residual_from_mean:
+            self.init_mean = None
+        else:
+            self.init_mean = torch.randn(1, 512, 512).cuda()
 
     def _forward(self, x):
         x = x * 2 - 1 
@@ -174,10 +181,10 @@ class StyleGANEncoderNet(nn.Module):
             )
         
         with torch.no_grad():
-            if self.init_mean is None:
+            if self.init_mean is None and self.predict_residual_from_mean:
                 self.init_mean = self._forward(x).mean(dim=0, keepdim=True)
 
-        return self._forward(x) - self.init_mean
+        return self._forward(x) - (0.0 if self.init_mean is None else self.init_mean)
 
 
 class Splitter(nn.Module):

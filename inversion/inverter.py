@@ -3,11 +3,14 @@ from .variables import *
 from .criterions import *
 from .jittering import *
 from .io import *
-from .inversion import * 
+from .inversion import *
 
 import training.networks as networks
 
 import matplotlib.pyplot as plt
+
+def generator_with_len(self):
+    pass
 
 
 @dataclass(eq=False)
@@ -16,18 +19,23 @@ class Inverter:
     num_steps: int
     variable_type: Type[Variable]
     criterion: InversionCriterion = VGGCriterion()
-    learning_rate: Optional[float] = None
-    beta_1: float = 0.9
-    beta_2: float = 0.999
     constraints: List[OptimizationConstraint] = None
     snapshot_frequency: int = 50
     seed: Optional[int] = 0
-    penalties: list = field(default_factory=list)
-    constraints: list = field(default_factory=list)
-    fine_tune_G: bool = False
-    step_every_n: int = 1
-            
-    def all_inversion_steps(self, target):
+    create_schedule: None = None
+    create_optimizer: None = None
+    ema_weight: float = 0.95
+    penalty: None = None
+    # step_every_n: int = 0.1
+
+    def __len__(self):
+        return self.num_steps // self.snapshot_frequency
+
+    def __post_init__(self):
+        pass
+
+    @torch.enable_grad()
+    def all_inversion_steps(self, target) -> Iterable[Inversion]:
         if self.seed is not None:
             torch.manual_seed(self.seed)
 
@@ -35,61 +43,89 @@ class Inverter:
         losses = []
         preds = []
 
+        variable = self.sample_var(target)
+        variables.append(variable)
+
         try:
-            for i, (loss, pred, variable) in enumerate(self.inversion_loop(target)):
+            for i, loss in enumerate(self.inversion_loop(target, variable)):
                 losses.append(loss)
 
-                if (i % self.snapshot_frequency == 0) or (i == self.num_steps - 1):
+                is_snapshot = i % self.snapshot_frequency == 0
+                if is_snapshot:
                     variables.append(variable)
-                    preds.append(pred)
+                    with torch.no_grad():
+                        preds.append(variable.to_image())
 
-                yield Inversion(target, variables, losses, preds)
+                yield Inversion(target, variables, losses, preds, self.ema), is_snapshot
         except KeyboardInterrupt:
             pass
+        
+        return Inversion(target, variables, losses, preds, self.ema, final=True), True
 
     def __call__(self, *args, **kwargs):
-        for inversion in self.all_inversion_steps(*args, **kwargs):
+        for inversion, _ in self.all_inversion_steps(*args, **kwargs):
             pass
         return inversion
 
     def sample_var(self, target):
-        return self.variable_type.sample_from(self.G, len(target))
+        if isinstance(self.variable_type, Variable):
+            return self.variable_type.copy()
+        else:
+            return self.variable_type.sample_from(self.G, len(target))
 
-    def inversion_loop(self, target) -> List[Tuple[torch.Tensor, torch.Tensor]]:
-        variable = self.sample_var(target)
+    def inversion_loop(self, target, variable) -> Iterable[Tuple[torch.Tensor, torch.Tensor]]:
         
-        optimizer = torch.optim.Adam(
-            list(variable.parameters())
-            + (list(self.G.synthesis.parameters()) if self.fine_tune_G else []),
-            self.learning_rate or self.variable_type.default_lr,  
-            (self.beta_1, self.beta_2)
-        )
+        optimizer = self.create_optimizer(list(variable.parameters()))
+        self.ema = variable.copy()
 
-        for step in range(self.num_steps + 1):
-            t = step / self.num_steps
+        if self.create_schedule is not None: # todo use a dummy schedule instead
+            schedule = self.create_schedule(optimizer)
+        else:
+            schedule = None
 
-            for constraint in self.constraints:
-                constraint.update(t)
+        loss = None
 
-            styles = variable.to_styles()
-            pred = variable.styles_to_image(styles)
+        def compute_loss(do_backprop: bool = True):
+            nonlocal loss
+            pred = variable.to_image()
             loss = self.criterion(pred, target)
 
-            cost = loss
-            for penalty in self.penalties:
-                cost += penalty(variable, styles, pred, target, loss)
+            expected_loss = loss.mean()
+
+            if self.penalty is not None:
+                expected_loss += self.penalty(pred)
             
-            do_step = (step + 1) % self.step_every_n == 0
-            (cost / self.step_every_n).mean().backward()
-            if do_step:
-                optimizer.step()
-                optimizer.zero_grad()
+            if loss.grad_fn is not None:
+                expected_loss.backward()
             
-            # variable.inform(optimizer.state_dict()['state'][0]['exp_avg_sq'])
+            variable.before_step()
 
-            yield loss.detach(), pred.detach(), variable.copy()
+            return expected_loss
+
+        for i in range(self.num_steps + 1):
+            optimizer.zero_grad()
+            optimizer.step(compute_loss)
+
+            # if i % self.step_every_n == 0:
+            if schedule is not None:
+                schedule.step()
+            variable.after_step()
+
+            #!!!
+            # with torch.no_grad():
+            #     self.ema.data.copy_((1.0 - self.ema_weight) * variable.data.detach().clone() + self.ema_weight * self.ema.data)
+            
+            optimizer.zero_grad()
+
+            yield loss.detach()
 
 
-class CloseInitInverter(Inverter):
-    def sample_var(self, target):
-        return self.variable_type.find_init_point(self.G, target, VGGCriterion())
+# todo pass in init as an object
+# class CloseInitInverter(Inverter):
+#     def sample_var(self, target):
+#         return self.variable_type.find_init_point(self.G, target, VGGCriterion())
+
+
+# class KDTreeInitInverter(Inverter):
+#     def sample_var(self, target):
+#         return self.variable_type.find_init_point(self.G, target, VGGCriterion())

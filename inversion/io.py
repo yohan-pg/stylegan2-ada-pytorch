@@ -11,15 +11,16 @@ import training.networks as networks
 # todo move this into a class which opens G than has IO methods?
 
 
+@torch.no_grad()
 def save_pickle(dict_of_models: dict, path: str):
     snapshot_data = {}
 
     for name, module in dict_of_models.items():
-        if module is not None:
-            # todo
-            # if num_gpus > 1:
-            #     misc.check_ddp_consistency(module, ignore_regex=r".*\.w_avg")
-            module = copy.deepcopy(module).eval().requires_grad_(False).cpu()
+        # if module is not None:
+        #     # todo
+        #     # if num_gpus > 1:
+        #     #     misc.check_ddp_consistency(module, ignore_regex=r".*\.w_avg")
+        #     module = copy.deepcopy(module).eval().requires_grad_(False).cpu()
         snapshot_data[name] = module
         del module
 
@@ -48,7 +49,7 @@ def open_generator(pkl_path: str):
     print(f"Loading generator from {pkl_path}...")
 
     with dnnlib.util.open_url(pkl_path) as fp:
-        return legacy.load_network_pkl(fp)["G_ema"].cuda().eval()
+        return legacy.load_network_pkl(fp)["G_ema"].cuda().eval().float()
 
 
 # todo fuse with open-gen
@@ -59,18 +60,34 @@ def open_discriminator(pkl_path: str):
         return legacy.load_network_pkl(fp)["D"].cuda().eval()
 
 
-def open_target(G, path: str):
-    target_pil = PIL.Image.open(path).convert("RGB")
-    w, h = target_pil.size
-    s = min(w, h)
-    target_pil = target_pil.crop(
-        ((w - s) // 2, (h - s) // 2, (w + s) // 2, (h + s) // 2)
-    )
-    target_pil = target_pil.resize(
-        (G.img_resolution, G.img_resolution), PIL.Image.LANCZOS
-    )
-    target_uint8 = np.array(target_pil, dtype=np.uint8)
-    return torch.tensor(target_uint8.transpose([2, 0, 1])).cuda().unsqueeze(0) / 255
+import shelve
+
+
+def cache(key, f, *args):
+    key = repr((key, args))
+    with shelve.open(f"cache/shelve_{f.__name__}") as db:
+        if key not in db:
+            db[key] = f(*args)
+        return db[key]
+
+
+def open_target(G, *paths: str):
+    images = []
+    for path in paths:
+        target_pil = PIL.Image.open(path).convert("RGB")
+        w, h = target_pil.size
+        s = min(w, h)
+        target_pil = target_pil.crop(
+            ((w - s) // 2, (h - s) // 2, (w + s) // 2, (h + s) // 2)
+        )
+        target_pil = target_pil.resize(
+            (G.img_resolution, G.img_resolution), PIL.Image.LANCZOS
+        )
+        target_uint8 = np.array(target_pil, dtype=np.uint8)
+        images.append(
+            torch.tensor(target_uint8.transpose([2, 0, 1])).cuda().unsqueeze(0) / 255
+        )
+    return torch.cat(images)
 
 
 @torch.no_grad()
@@ -132,14 +149,16 @@ class RealDataloader(InversionDataloader):
         )
 
     def __len__(self):
-        return self.num_images
+        return self.num_images // self.batch_size
 
     def subset(self, num_images: int) -> "RealDataloader":
-        return RealDataloader(self.dataset_path, self.batch_size, self.num_images, self.seed)
+        return RealDataloader(
+            self.dataset_path, self.batch_size, self.num_images, self.seed
+        )
 
     def __iter__(self):
         inner_loader = torch.utils.data.DataLoader(
-            self.dataset, batch_size=self.batch_size, shuffle=False
+            self.dataset, batch_size=self.batch_size, shuffle=False, drop_last=True
         )
 
         def loader_transform():
@@ -181,7 +200,7 @@ class InvertedDataloader:
 
         for target in tqdm.tqdm(target_dataloader):
             inversion = inverter(target).purge()
-            inversion.rerun = inverter(target).purge()
+            # inversion.rerun = inverter(target).purge()
             self.inversions.append(inversion)
 
         self.num_images = self.target_dataloader.num_images
@@ -189,11 +208,11 @@ class InvertedDataloader:
     def __len__(self):
         return len(self.target_dataloader)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterable:
         for i, _ in enumerate(self.target_dataloader):
             inversion = self.inversions[i]
             inversion.move_to_cuda()
-            inversion.rerun.move_to_cuda()
+            # inversion.rerun.move_to_cuda()
             yield inversion
             inversion.move_to_cuda()
-            inversion.rerun.move_to_cuda()
+            # inversion.rerun.move_to_cuda()

@@ -22,7 +22,7 @@ INJECT_IN_TORGB = False
 
 
 # ----------------------------------------------------------------------------
-
+    
 
 @misc.profiled_function
 def normalize_2nd_moment(x, dim=1, eps=1e-8):
@@ -30,6 +30,9 @@ def normalize_2nd_moment(x, dim=1, eps=1e-8):
 
 
 # ----------------------------------------------------------------------------
+
+class Style(torch.Tensor):
+    pass
 
 
 @persistence.persistent_class
@@ -71,7 +74,6 @@ class FullyConnectedLayer(torch.nn.Module):
             x = bias_act.bias_act(x, b, act=self.activation)
         return x
 
-
 # ----------------------------------------------------------------------------
 
 @misc.profiled_function
@@ -101,7 +103,7 @@ def modulated_conv2d(
         assert styles.ndim == 3
         misc.assert_shape(styles, [batch_size, None, in_channels])  # [NI]
 
-    assert x.dtype != torch.float16
+    # assert x.dtype != torch.float16
 
     # Calculate per-sample weights and demodulation coefficients.
     w = None
@@ -117,6 +119,74 @@ def modulated_conv2d(
             
     if demodulate:
         dcoefs = (w.square().sum(dim=[2, 3, 4]) + 1e-8).rsqrt()  # [NO]
+    if demodulate and fused_modconv:
+        w = w * dcoefs.reshape(batch_size, -1, 1, 1, 1)  # [NOIkk]
+
+    # Execute as one fused op using grouped convolution.
+    with misc.suppress_tracer_warnings():  # this value will be treated as a constant
+        batch_size = int(batch_size)
+    misc.assert_shape(x, [batch_size, in_channels, None, None])
+    x = x.reshape(1, -1, *x.shape[2:])
+    w = w.reshape(-1, in_channels, kh, kw)
+    x = conv2d_resample.conv2d_resample(
+        x=x,
+        w=w.to(x.dtype),
+        f=resample_filter,
+        up=up,
+        down=down,
+        padding=padding,
+        groups=batch_size,
+        flip_weight=flip_weight,
+    )
+    x = x.reshape(batch_size, -1, *x.shape[2:])
+    if noise is not None:
+        x = x.add_(noise)
+    return x
+
+
+def modulated_conv2dlog(
+    x,  # Input tensor of shape [batch_size, in_channels, in_height, in_width].
+    weight,  # Weight tensor of shape [out_channels, in_channels, kernel_height, kernel_width].
+    styles,  # Modulation coefficients of shape [batch_size, in_channels].
+    noise=None,  # Optional noise tensor to add to the output activations.
+    up=1,  # Integer upsampling factor.
+    down=1,  # Integer downsampling factor.
+    padding=0,  # Padding with respect to the upsampled image.
+    resample_filter=None,  # Low-pass filter to apply when resampling activations. Must be prepared beforehand by calling upfirdn2d.setup_filter().
+    demodulate=True,  # Apply weight demodulation?
+    flip_weight=True,  # False = convolution, True = correlation (matches torch.nn.functional.conv2d).
+    fused_modconv=True,  # Perform modulation, convolution, and demodulation as a single fused operation?
+):
+    fused_modconv = True #!
+
+    batch_size = x.shape[0]
+    out_channels, in_channels, kh, kw = weight.shape
+    misc.assert_shape(weight, [out_channels, in_channels, kh, kw])  # [OIkk]
+    misc.assert_shape(x, [batch_size, in_channels, None, None])  # [NIHW]
+
+    if styles.ndim == 2:
+        misc.assert_shape(styles, [batch_size, in_channels])  # [NI]
+    else:
+        assert styles.ndim == 3
+        misc.assert_shape(styles, [batch_size, None, in_channels])  # [NI]
+
+    # assert x.dtype != torch.float16
+
+    # Calculate per-sample weights and demodulation coefficients.
+    w = None
+    dcoefs = None
+
+    if demodulate or fused_modconv:
+        w = weight.unsqueeze(0)  # [NOIkk]
+
+        if styles.ndim == 3: # * We are using adaconv
+            w = w * styles[:, : w.shape[1], : w.shape[2]].unsqueeze(3).unsqueeze(4)
+        else:
+            w = w * styles.reshape(batch_size, 1, -1, 1, 1)  # [NOIkk]
+            
+    if demodulate:
+        dcoefs = (w.square().sum(dim=[2, 3, 4]) + 1e-8).rsqrt()  # [NO]
+        print(dcoefs)
     if demodulate and fused_modconv:
         w = w * dcoefs.reshape(batch_size, -1, 1, 1, 1)  # [NOIkk]
 
@@ -1184,6 +1254,15 @@ class Discriminator(torch.nn.Module):
             **common_kwargs,
         )
 
+    def extract_features(self, img, **block_kwargs):
+        x = None
+        for res in self.block_resolutions[:2]:
+            block = getattr(self, f"b{res}")
+            x, img = block(x, img, **block_kwargs)
+        # x, _ = getattr(self, f"b128")(x, img, **block_kwargs)
+        return x
+            
+
     def forward(self, img, c, **block_kwargs):
         x = None
         for res in self.block_resolutions:
@@ -1196,3 +1275,102 @@ class Discriminator(torch.nn.Module):
         x = self.b4(x, img, cmap)
         return x
 # ----------------------------------------------------------------------------
+
+
+
+
+@persistence.persistent_class
+class EnergyModel(torch.nn.Module):
+    def __init__(
+        self,
+        c_dim,  # Conditioning label (C) dimensionality.
+        img_resolution,  # Input resolution.
+        img_channels,  # Number of input color channels.
+        architecture="resnet",  # Architecture: 'orig', 'skip', 'resnet'.
+        channel_base=32768,  # Overall multiplier for the number of channels.
+        channel_max=512,  # Maximum number of channels in any layer.
+        num_fp16_res=0,  # Use FP16 for the N highest resolutions.
+        conv_clamp=None,  # Clamp the output of convolution layers to +-X, None = disable clamping.
+        cmap_dim=None,  # Dimensionality of mapped conditioning label, None = default.
+        block_kwargs={},  # Arguments for DiscriminatorBlock.
+        mapping_kwargs={},  # Arguments for MappingNetwork.
+        epilogue_kwargs={},  # Arguments for DiscriminatorEpilogue.
+    ):
+        super().__init__()
+        self.c_dim = c_dim
+        self.img_resolution = img_resolution
+        self.img_resolution_log2 = int(np.log2(img_resolution))
+        self.img_channels = img_channels
+        self.block_resolutions = [
+            2 ** i for i in range(self.img_resolution_log2, 2, -1)
+        ]
+        channels_dict = {
+            res: min(channel_base // res, channel_max)
+            for res in self.block_resolutions + [4]
+        }
+        fp16_resolution = max(2 ** (self.img_resolution_log2 + 1 - num_fp16_res), 8)
+
+        if cmap_dim is None:
+            cmap_dim = channels_dict[4]
+        if c_dim == 0:
+            cmap_dim = 0
+
+        common_kwargs = dict(
+            img_channels=img_channels, architecture=architecture, conv_clamp=conv_clamp
+        )
+        cur_layer_idx = 0
+        for res in self.block_resolutions:
+            in_channels = channels_dict[res] if res < img_resolution else 0
+            tmp_channels = channels_dict[res]
+            out_channels = channels_dict[res // 2]
+            use_fp16 = res >= fp16_resolution
+            block = DiscriminatorBlock(
+                in_channels,
+                tmp_channels,
+                out_channels,
+                resolution=res,
+                first_layer_idx=cur_layer_idx,
+                use_fp16=use_fp16,
+                **block_kwargs,
+                **common_kwargs,
+            )
+            setattr(self, f"b{res}", block)
+            cur_layer_idx += block.num_layers
+        if c_dim > 0:
+            self.mapping = MappingNetwork(
+                z_dim=0,
+                c_dim=c_dim,
+                w_dim=cmap_dim,
+                num_ws=None,
+                w_avg_beta=None,
+                **mapping_kwargs,
+            )
+        del epilogue_kwargs['mbstd_num_channels']
+        self.b4 = DiscriminatorEpilogue(
+            channels_dict[4],
+            cmap_dim=cmap_dim,
+            resolution=4,
+            **epilogue_kwargs,
+            **common_kwargs,
+            mbstd_num_channels=0
+        )
+
+    def extract_features(self, img, **block_kwargs):
+        x = None
+        for res in self.block_resolutions[:2]:
+            block = getattr(self, f"b{res}")
+            x, img = block(x, img, **block_kwargs)
+        # x, _ = getattr(self, f"b128")(x, img, **block_kwargs)
+        return x
+
+    def forward(self, img, c=None, **block_kwargs):
+        x = None
+        for res in self.block_resolutions:
+            block = getattr(self, f"b{res}")
+            x, img = block(x, img, **block_kwargs)
+
+        cmap = None
+        if self.c_dim > 0:
+            cmap = self.mapping(None, c)
+        x = self.b4(x, img, cmap)
+        return x

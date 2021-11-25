@@ -11,3 +11,7 @@ __pycache__/
 /extensions/
 /cache/
 stylegan2.tar.gz
+/DiffJPEG/
+
+/figures/out/
+/old/

@@ -1,0 +1,10 @@
+
+class DiscriminatorPenalty(nn.Module):
+    def __init__(self, D, weight, other):
+        super().__init__()
+        self.D = D
+        self.weight = weight
+        self.other = other
+
+    def forward(self, result, target):
+        return self.weight * (Discriminator.extract_features(D, result * mask) - Discriminator.extract_features(D, target)).square().sum(dim=(1, 2, 3)) #+ self.other(result, target)

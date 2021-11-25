@@ -232,9 +232,11 @@ def compute_feature_stats_for_dataset(
     batch_size=64,
     data_loader_kwargs=None,
     max_items=None,
+    dataset=None,
     **stats_kwargs,
 ):
-    dataset = dnnlib.util.construct_class_by_name(**opts.dataset_kwargs)
+    if dataset is None:
+        dataset = dnnlib.util.construct_class_by_name(**opts.dataset_kwargs)
     if data_loader_kwargs is None:
         data_loader_kwargs = dict(pin_memory=True, num_workers=3, prefetch_factor=2)
 

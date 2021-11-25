@@ -100,9 +100,9 @@ def conv2d_resample(
     """
     # Validate arguments.
     assert isinstance(x, torch.Tensor) and (x.ndim == 4)
-    assert isinstance(w, torch.Tensor) and (w.ndim == 4) and (w.dtype == x.dtype)
+    assert isinstance(w, torch.Tensor) and (w.ndim == 4) #and (w.dtype == x.dtype), breakpoint()
     assert f is None or (
-        isinstance(f, torch.Tensor) and f.ndim in [1, 2] and f.dtype == torch.float32
+        isinstance(f, torch.Tensor) and f.ndim in [1, 2] #and f.dtype == torch.float32
     )
     assert isinstance(up, int) and (up >= 1)
     assert isinstance(down, int) and (down >= 1)

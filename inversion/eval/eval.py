@@ -3,6 +3,7 @@ from ..prelude import *
 from ..inverter import *
 
 from datetime import datetime
+import glob 
 
 Result = Dict[str, torch.Tensor]
 Results = Dict[str, Result]
@@ -22,7 +23,7 @@ class Evaluation:
         raise NotImplementedError
 
     def create_artifacts(
-        self, target_dataloader: RealDataloader, results: Results
+        self, target_dataloader: RealDataloader
     ):
         raise NotImplementedError
 
@@ -44,20 +45,22 @@ class Evaluation:
         return results
 
     def load_results_from_disk(self) -> Results:
-        for directory in os.listdir(self.out_dir):
-            pass
+        results = {}
+        
+        for result_path in glob.glob(f"{self.out_dir}/**/result.pkl", recursive=True):
+            name = "/".join(result_path.replace(self.out_dir + "/", "").split("/")[:-1])
+            results[name] = pickle.load(open(result_path, "rb"))
+        
+        return results 
 
     __call__ = run
 
     def make_table(self, results) -> None:
         file_path = f"{self.out_dir}/table.txt"
         
-        if not os.path.exists(file_path):
-            with open(file_path, "w") as file:
-                print(f"## {self.name}", file=file)
-        
-        with open(file_path, "a") as file:
-            max_len_name = max(map(len,results.keys()))
+        with open(file_path, "w") as file:
+            print(f"## {self.name}", file=file)
+            max_len_name = max(map(len, results.keys()))
             for experiment_name, result in results.items():
                 print(
                     f"{experiment_name.ljust(max_len_name + 1, ' ')}: {result['losses'].mean().item():.04f} +- {result['losses'].std().item():.04f}",
@@ -65,16 +68,80 @@ class Evaluation:
                 )
 
     def make_histogram(self, results):
-        plt.figure()
-        
-        names = []
-        losses = []
-        for experiment_name, result in results.items():
-            losses.append(result["losses"].cpu().numpy())
-            names.append(experiment_name)
-        
-        plt.hist(losses)
-        plt.xlim(left=0)
-        plt.title(f"{self.name} Loss Distribution")
-        plt.legend(names)
-        plt.savefig(f"{self.out_dir}/histogram.png")
+        for group_name in set([key.split("/")[1] for key in results.keys()]):
+            plt.figure()
+            
+            names = []
+            losses = []
+            for experiment_name, result in results.items():
+                if experiment_name.split("/")[1] == group_name:
+                    losses.append(result["losses"].cpu().numpy())
+                    names.append(experiment_name)
+            
+            plt.hist(losses)
+            plt.xlim(left=0)
+            plt.title(f"{self.name} Loss Distribution")
+            plt.legend(names)
+            plt.savefig(f"{self.out_dir}/histogram_{group_name}.png")
+
+    @torch.no_grad()
+    def make_plot(
+        self,
+        target_dataloader: RealDataloader,
+        results: Results,
+    ) -> None:
+        description = f"over {target_dataloader.num_images} images"
+
+        for group_name in set([key.split("/")[1] for key in results.keys()]):
+
+            plt.figure()
+            plt.title(f"[min, Q1, median, Q3, max] {description}")
+            plt.suptitle(
+                "Reconstruction Error Bounds & Quantiles per Optimization Step"
+            )
+
+            cmap = plt.get_cmap("tab10")
+
+            names = []
+            for i, (experiment_name, result) in enumerate(
+                [
+                    (experiment_name, result)
+                    for (experiment_name, result) in results.items()
+                    if experiment_name.split("/")[1] == group_name
+                ]
+            ):
+                all_losses = result["losses_per_step"]
+                names.append(experiment_name)
+                low = all_losses.amin(dim=0)
+                q1 = all_losses.quantile(0.25, dim=0)
+                medians = all_losses.median(dim=0).values
+                q3 = all_losses.quantile(0.75, dim=0)
+                high = all_losses.amax(dim=0)
+                assert all(
+                    data.shape == all_losses[0].shape
+                    for data in [low, q1, medians, q3, high]
+                )
+
+                plt.plot(medians.cpu(), color=cmap(i))
+                plt.fill_between(
+                    range(all_losses.shape[1]),
+                    q1.cpu(),
+                    q3.cpu(),
+                    alpha=0.3,
+                    color=cmap(i),
+                )
+                plt.fill_between(
+                    range(all_losses.shape[1]),
+                    low.cpu(),
+                    high.cpu(),
+                    alpha=0.2,
+                    color=cmap(i),
+                )
+                plt.ylim(0.0, 0.6)
+
+            plt.legend(names)
+
+            plt.xlabel("Optimization Step")
+            plt.ylabel("Reconstruction Error")
+            plt.ylim(0)
+            plt.savefig(f"{self.out_dir}/plot_{group_name}.png")

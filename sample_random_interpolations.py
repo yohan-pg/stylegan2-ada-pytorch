@@ -20,8 +20,7 @@ if __name__ == "__main__":
             G = open_generator(G_PATH)
 
             images = []
-            
-            # ZVariable.interpolate = WVariable.interpolate #!!!
+        
 
             Interpolation.from_variables(
                 VARIABLE_TYPE.sample_random_from(G, batch_size=BATCH_SIZE),

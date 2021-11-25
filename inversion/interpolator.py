@@ -42,11 +42,15 @@ class Interpolation:
         return criterion(self.variables[0].data, self.variables[-1].data)
 
     @staticmethod
+    @torch.no_grad()
     def from_variables(
         A: Variable, B: Variable, num_steps: int = 7, gain=1.0
     ) -> "Interpolation":
         frames = []
         variables = []
+        
+        A.eval()
+        B.eval()
 
         for i in range(num_steps):
             alpha = i / (num_steps - 1) * gain

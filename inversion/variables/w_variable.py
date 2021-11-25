@@ -51,6 +51,7 @@ class WVariable(Variable):
     def to_W(self):
         return self
 
+  
     @classmethod
     def sample_random_from(cls, G: nn.Module, batch_size: int = 1, **kwargs):
         data = G.mapping(
@@ -85,21 +86,48 @@ class WVariable(Variable):
 
         return data.repeat(1, self.G[0].num_ws, 1)
 
-class WVariableCenterAtMean():
+
+class WVariableInitRandom(WVariable):
+    sample_from = WVariable.sample_random_from
+    
+
+class WVariableWithDropout(WVariable):
+    dropout_prob = 0.0
+
     @classmethod
     def sample_from(cls, G: nn.Module, *args, **kwargs):
         var = WVariable.sample_from(G, *args, **kwargs)
         with torch.no_grad():
             var.data *= 0
-        return var
+        return WVariableWithDropout.from_variable(var)
 
     def to_styles(self) -> Styles:
         G = self.G[0]
-        mean = G.mapping.w_avg.reshape(1, 1, G.w_dim).repeat(
-            len(self.data), G.num_required_vectors(), 1
+        
+        mean = G.mapping.w_avg.reshape(1, 1, G.w_dim)
+
+        # if self.training:
+        #     selection = torch.rand(data.size(1)) < self.prob
+        #     data[:, selection] = self.G[0].mapping(torch.randn_like(data), None)[:, selection]
+            
+        return (self.data + mean).repeat(1, self.G[0].num_ws, 1)
+
+
+
+class WVariableRandomInit(WVariable):
+    init_truncation = 0.25
+
+    @classmethod
+    def sample_from(cls, G: nn.Module, batch_size: int = 1):
+        return cls(
+            G,
+            nn.Parameter(
+                WVariable.sample_random_from(
+                    G, batch_size, truncation_psi=cls.init_truncation
+                ).data
+            ),
         )
 
-        return (self.data + mean).repeat(1, self.G[0].num_ws, 1)
 
 
 class WVariableWithNoise(WVariable):
@@ -139,3 +167,14 @@ class WVariableLastLayers(WVariable):
             (mean[:, : 512 * self.num_layers], styles[:, 512 * self.num_layers :]),
             dim=1,
         )
+
+
+
+
+def add_encoder_constraint(cls, E, alpha = 1.0, truncation=0.0, paste=lambda x: x):
+    class EncoderConstrained(cls):
+        def after_step(self):
+            super().after_step()
+            with torch.no_grad():
+                self.data.copy_(self.data.lerp(E(paste(self.to_image())).data, alpha).lerp(self.G[0].mapping.w_avg.reshape(1, 1, -1), truncation))
+    return EncoderConstrained

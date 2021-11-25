@@ -1,6 +1,9 @@
 from .eval_image_editing_consistency import *
 from .eval_interpolation_determinism import *
 from .eval_reconstruction_quality import *
+from .eval_interpolation_quality import *
+
+import sys
 
 
 def run_eval(
@@ -10,8 +13,20 @@ def run_eval(
     methods: Dict[str, networks.Generator],
     evaluations: List[Evaluation],
     num_steps: int,
+    inverter_type: Type[Inverter],
+    peform_dry_run: bool = True,
+    **kwargs,
 ) -> None:
-    for dry_run in [True, False] if num_steps > 1 else [True]:
+    assert num_steps >= 1
+
+    if not peform_dry_run:
+        runs = [False]
+    elif num_steps == 1:
+        runs = [True]
+    else:
+        runs = [True, False]
+
+    for dry_run in runs:
         timestamp = create_eval_directory(label, dry_run)
         target_dataloader = (
             target_dataloader
@@ -27,17 +42,18 @@ def run_eval(
 
                 dataloaders[experiment_name] = InvertedDataloader(
                     target_dataloader,
-                    Inverter(
+                    inverter_type(
                         G,
                         num_steps=num_steps if not dry_run else 1,
                         variable_type=variable_type,
                         seed=target_dataloader.seed,
+                        **kwargs,
                     ),
                 )
 
             for evaluation in evaluations:
                 evaluation(timestamp)(dataloaders)
-    
+
     return timestamp
 
 
@@ -46,12 +62,12 @@ def create_eval_directory(label: str, dry_run: bool) -> str:
 
     prefix = "" if label == "" else label + "_"
     if dry_run:
-        timestamp = prefix + "dry_run"
+        timestamp = "_dry_run" + prefix
     else:
         timestamp = prefix + str(datetime.now()).split(".")[0].replace(" ", "_")
 
     fresh_dir(f"eval/{timestamp}")
-    shutil.copyfile(__file__, f"eval/{timestamp}/config.txt")
+    shutil.copyfile(sys.argv[0], f"eval/{timestamp}/config.txt")
 
     return timestamp
 
@@ -62,6 +78,10 @@ def create_artifacts(
     for evaluation in evaluations:
         evaluation(timestamp).create_artifacts(target_dataloader)
     join_evaluation_tables(timestamp)
+
+
+def create_montage(timestamp: str) -> None:
+    pass
 
 
 def join_evaluation_tables(timestamp: str) -> None:
