@@ -1,13 +1,5 @@
-# Copyright (c) 2021, NVIDIA CORPORATION.  All rights reserved.
-#
-# NVIDIA CORPORATION and its licensors retain all intellectual property
-# and proprietary rights in and to this software, related documentation
-# and any modifications thereto.  Any use, reproduction, disclosure or
-# distribution of this software and related documentation without an express
-# license agreement from NVIDIA CORPORATION is strictly prohibited.
-
 """Project given image to the latent space of pretrained network pickle."""
-
+from edits.prelude import *
 from inversion import *
 from training.networks import *
 
@@ -16,13 +8,14 @@ if False:
     G_PATH = "pretrained/no_torgb_adain_tmp.pkl"
 else:
     METHOD = "adaconv"
-    G_PATH = "pretrained/ffhq.pkl"
+    E_PATH = "encoder-training-runs/encoder_ffhq_0.1/encoder-snapshot-000050.pkl"
 
-VARIABLE_TYPE = WPlusVariableRandomInit
-NUM_STEPS = 300
+#!!! sequential fails with encoder init
+
+NUM_STEPS = 500
 CRITERION_TYPE = VGGCriterion
 SNAPSHOT_FREQ = 10
-SEQUENTIAL = True
+SEQUENTIAL = True 
 
 AIM_FOR_FAKE_A = False
 AIM_FOR_FAKE_B = False
@@ -33,25 +26,24 @@ TARGET_C_PATH = "datasets/samples/hen_face_a.png"
 
 SEED = 2
 
-print(VARIABLE_TYPE.__name__)
 OUT_DIR = f"out"
 
 if __name__ == "__main__":
     fresh_dir(OUT_DIR)
 
-    G = open_generator(G_PATH)
-    G.requires_grad_(True)
-    G.train()
+    E = open_encoder(E_PATH)
+
+    VARIABLE_TYPE = add_hard_encoder_constraint(E.variable_type, 0.1, encoder_init=False)
 
     criterion = CRITERION_TYPE()
 
     def invert_target(target: torch.Tensor, name: str, variable_type: Variable):
         inverter = Inverter(
-            G,
+            E,
             variable_type=variable_type,
             num_steps=NUM_STEPS,
-            criterion=100 * criterion,
-            create_optimizer=lambda params: torch.optim.Adam(params, lr=0.1),
+            criterion=1000 * criterion,
+            create_optimizer=lambda params: torch.optim.Adam(params, lr=1.0),
             create_schedule=lambda optimizer: lr_scheduler.LambdaLR(
                 optimizer, lambda epoch: min(1.0, epoch / 100.0)
             ),
@@ -72,9 +64,9 @@ if __name__ == "__main__":
 
     torch.manual_seed(SEED)
 
-    target_A = open_target(G, TARGET_A_PATH)
-    target_B = open_target(G, TARGET_B_PATH)
-    target_C = open_target(G, TARGET_C_PATH)
+    target_A = open_target(E, TARGET_A_PATH)
+    target_B = open_target(E, TARGET_B_PATH)
+    target_C = open_target(E, TARGET_C_PATH)
 
     A = invert_target(target_A, "A", VARIABLE_TYPE)
     B = invert_target(
@@ -92,17 +84,47 @@ if __name__ == "__main__":
         f"{OUT_DIR}/face_mix.png"
     )
 
-    save_image(
-        (
-            (A.final_variable - B.final_variable) * 0.8
-            + WPlusVariable.sample_from(G, 1)
-        ).to_image(),
-        f"{OUT_DIR}/face_diff.png",
-    )
-
     Interpolation.from_variables(
-        C.final_variable - (B.final_variable - A.final_variable),
+        C.final_variable,
         C.final_variable + (B.final_variable - A.final_variable),
         num_steps=12,
         gain=3.0,
     ).save(f"{OUT_DIR}/expression_transfer.png")
+
+    Y = A.final_variable
+    Y2 = B.final_variable
+    H = C.final_variable
+
+    O = Y.from_data(Y.data * 0 + E.G[0].mapping.w_avg)
+
+    Interpolation.from_variables(
+        H,
+        O,
+        num_steps=9,
+        gain=1.0,
+    ).save(f"{OUT_DIR}/to_origin.png")
+    
+    delta_Y = Y2 - Y
+
+    H_to_Y = Y - H
+    H_to_Y.data /= H_to_Y.data.norm(dim=(1,2))
+
+    O_to_H = H - O
+    O_to_H.data /= O_to_H.data.norm(dim=(1,2))
+    
+    corrected_delta_Y = delta_Y - H_to_Y * (delta_Y.data * H_to_Y.data).sum()
+    rectified_delta_Y = corrected_delta_Y - O_to_H * (corrected_delta_Y.data * O_to_H.data).sum()
+    
+    Interpolation.from_variables(
+        H,
+        H + corrected_delta_Y,
+        num_steps=9,
+        gain=2.0,
+    ).save(f"{OUT_DIR}/expression_transfer_corrected.png")
+
+    Interpolation.from_variables(
+        H + corrected_delta_Y * 2.0,
+        O,
+        num_steps=9,
+        gain=1.0,
+    ).save(f"{OUT_DIR}/transfer_to_origin.png")

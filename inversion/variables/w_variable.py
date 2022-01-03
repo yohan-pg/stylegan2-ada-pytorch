@@ -1,44 +1,12 @@
 from .variable import *
 
 
-def lerp(a, b, alpha):
-    return (1.0 - alpha) * a + alpha * b
-
-
 class WVariable(Variable):
     space_name = "W"
     default_lr = 0.1
 
     @classmethod
     def sample_from(cls, G: nn.Module, batch_size: int = 1, avg_samples=10_000):
-        # data = G.mapping(
-        #     (
-        #         torch.zeros(batch_size, G.num_required_vectors(), G.z_dim)
-        #         .squeeze(1)
-        #         .cuda()
-        #     ),
-        #     None,
-        #     skip_w_avg_update=True,
-        # )[:, : G.num_required_vectors(), :]
-
-        # with torch.no_grad():
-        #     # * Updates G.mapping.w_avg with a large number of samples
-        #     key = (
-        #         "use_adaconv"
-        #         if hasattr(G.mapping, "use_adaconv")
-        #         else "sample_for_adaconv"
-        #     )
-
-        #     temp_beta = G.mapping.w_avg_beta
-        #     temp_adaconv = getattr(G.mapping, key)
-
-        #     setattr(G.mapping, key, False)
-        #     G.mapping.w_avg_beta = 0.0
-        #     G.mapping(torch.randn(avg_samples, G.z_dim).cuda(), None)
-
-        #     G.mapping.w_avg_beta = temp_beta
-        #     setattr(G.mapping, key, temp_adaconv)
-
         data = G.mapping.w_avg.reshape(1, 1, G.w_dim).repeat(
             batch_size, G.num_required_vectors(), 1
         )
@@ -51,7 +19,6 @@ class WVariable(Variable):
     def to_W(self):
         return self
 
-  
     @classmethod
     def sample_random_from(cls, G: nn.Module, batch_size: int = 1, **kwargs):
         data = G.mapping(
@@ -62,7 +29,7 @@ class WVariable(Variable):
             ),
             None,
             skip_w_avg_update=True,
-            **kwargs
+            **kwargs,
         )[:, : G.num_required_vectors(), :]
 
         return cls(
@@ -72,46 +39,12 @@ class WVariable(Variable):
 
     def interpolate(self, other: "WVariable", alpha: float) -> Styles:
         assert self.G == other.G
-        return self.__class__(self.G[0], lerp(self.data, other.data, alpha))
+        return self.__class__(self.G[0], self.data.lerp(other.data, alpha))
 
     def to_styles(self) -> Styles:
         data = self.data
 
-        # if self.init_at_mean:
-        #     G = self.G[0]
-        #     mean = G.mapping.w_avg.reshape(1, 1, G.w_dim).repeat(
-        #         len(data), G.num_required_vectors(), 1
-        #     )
-        #     data = data + mean
-
         return data.repeat(1, self.G[0].num_ws, 1)
-
-
-class WVariableInitRandom(WVariable):
-    sample_from = WVariable.sample_random_from
-    
-
-class WVariableWithDropout(WVariable):
-    dropout_prob = 0.0
-
-    @classmethod
-    def sample_from(cls, G: nn.Module, *args, **kwargs):
-        var = WVariable.sample_from(G, *args, **kwargs)
-        with torch.no_grad():
-            var.data *= 0
-        return WVariableWithDropout.from_variable(var)
-
-    def to_styles(self) -> Styles:
-        G = self.G[0]
-        
-        mean = G.mapping.w_avg.reshape(1, 1, G.w_dim)
-
-        # if self.training:
-        #     selection = torch.rand(data.size(1)) < self.prob
-        #     data[:, selection] = self.G[0].mapping(torch.randn_like(data), None)[:, selection]
-            
-        return (self.data + mean).repeat(1, self.G[0].num_ws, 1)
-
 
 
 class WVariableRandomInit(WVariable):
@@ -128,53 +61,179 @@ class WVariableRandomInit(WVariable):
             ),
         )
 
-
-
-class WVariableWithNoise(WVariable):
-    noise_gain = 0.1
-
-    def to_styles(self) -> Styles:
-        return (self.data + torch.randn_like(self.data) * self.noise_gain).repeat(
-            1, self.G[0].num_ws, 1
-        )
-
-
-class WVariableEarlyLayers(WVariable):
-    num_layers = 10
+def l2(a, b):
+    return ((a - b).pow(2.0).sum(dim=(1, 2)) + 1e-20).sqrt().mean()
     
-    def to_styles(self) -> Styles:
-        styles = super().to_styles()
-        mean = WVariable.sample_from(self.G[0], len(self.data)).data.repeat(
-            1, self.G[0].num_ws, 1
-        )
-
-        return torch.cat(
-            (styles[:, : 512 * self.num_layers], mean[:, 512 * self.num_layers :]),
-            dim=1,
-        )
-
-
-class WVariableLastLayers(WVariable):
-    num_layers = 8
-
-    def to_styles(self) -> Styles:
-        styles = super().to_styles()
-        mean = WVariable.sample_from(self.G[0], len(self.data)).data.repeat(
-            1, self.G[0].num_ws, 1
-        )
-
-        return torch.cat(
-            (mean[:, : 512 * self.num_layers], styles[:, 512 * self.num_layers :]),
-            dim=1,
-        )
-
-
-
-
-def add_encoder_constraint(cls, E, alpha = 1.0, truncation=0.0, paste=lambda x: x):
+def add_soft_encoder_constraint(
+    cls, alpha=1.0, truncation=0.0, paste=lambda x: x, encoder_init=True, gamma=1.0, distance=l2
+):
     class EncoderConstrained(cls):
-        def after_step(self):
-            super().after_step()
-            with torch.no_grad():
-                self.data.copy_(self.data.lerp(E(paste(self.to_image())).data, alpha).lerp(self.G[0].mapping.w_avg.reshape(1, 1, -1), truncation))
+        space_name = cls.space_name + "e"
+
+        @classmethod
+        def sample_from(cls, E: nn.Module, *args, **kwargs):
+            E.G[0].E = E
+            return super().sample_from(E.G[0], *args, **kwargs)
+
+        @classmethod
+        def sample_random_from(cls, E: nn.Module, *args, **kwargs):
+            E.G[0].E = E
+            return super().sample_random_from(E.G[0], *args, **kwargs)
+
+        @torch.no_grad()
+        def init_to_target(self, target):
+            init_point = self.G[0].E(target).data
+
+            if cls.__name__ == "WPlusVariable":
+                init_point = init_point.repeat(1, self.G[0].mapping.num_ws, 1)
+
+            if encoder_init:
+                self.data.copy_(init_point)
+
+        def penalty(self, pred, target):
+            nonlocal alpha
+            nonlocal truncation
+            alpha *= gamma
+            truncation *= gamma
+            anchor = self.G[0].E(paste(self.to_image())).data.detach() 
+            
+            if cls.__name__ == "WPlusVariable":
+                anchor = anchor.repeat(1, self.G[0].mapping.num_ws, 1)
+
+            return alpha * distance(
+                self.data,
+                anchor,
+            ) + truncation * distance(
+                self.data,
+                self.G[0]
+                .mapping.w_avg.reshape(1, 1, -1)
+                .repeat(self.data.size(0), self.data.size(1), 1),
+            )
+
     return EncoderConstrained
+
+
+def add_soft_encoder_constraint_mahalanobis(
+    cls, alpha=1.0, truncation=0.0, paste=lambda x: x, *args, **kwargs
+):
+    class EncoderConstrained(add_soft_encoder_constraint(cls, alpha=alpha, truncation=truncation, *args, **kwargs)):
+        def penalty(self, pred, target):
+            return alpha * nn.MSELoss()(
+                self.data,
+                self.G[0].E(paste(self.to_image())).data,
+            ) + truncation * nn.MSELoss()(
+                self.data,
+                self.G[0]
+                .mapping.w_avg.reshape(1, 1, -1)
+                .repeat(self.data.size(0), self.data.size(1), 1),
+            )
+
+    return EncoderConstrained
+
+
+def add_soft_encoder_constraint_image_space(
+    cls, alpha=1.0, truncation=0.0, paste=lambda x: x, *args, **kwargs
+):
+    class EncoderConstrained(add_soft_encoder_constraint(cls, alpha=alpha, truncation=truncation, *args, **kwargs)):
+        def penalty(self, pred, target):
+            G = self.G[0]
+            E = G.E 
+
+            image = self.to_image()
+            with torch.no_grad():
+                latent_image = E(image)
+                reimage = latent_image.to_image()
+                anchor = latent_image.data
+            
+            if cls.__name__ == "WPlusVariable":
+                anchor = anchor.repeat(1, self.G[0].mapping.num_ws, 1)
+
+            return alpha * nn.MSELoss()(
+                image,
+                reimage,
+            ) + truncation * nn.MSELoss()(
+                self.data,
+                self.G[0]
+                .mapping.w_avg.reshape(1, 1, -1)
+                .repeat(self.data.size(0), self.data.size(1), 1),
+            )
+
+    return EncoderConstrained
+
+
+def add_hard_encoder_constraint(
+    cls, alpha=1.0, truncation=0.0, paste=lambda x: x, encoder_init=True, gamma=1.0, towards_init_point=None
+):
+    class EncoderConstrained(cls):
+        space_name = cls.space_name + "e"
+
+        @classmethod
+        def sample_from(cls, E: nn.Module, *args, **kwargs):
+            E.G[0].E = E
+            return super().sample_from(E.G[0], *args, **kwargs)
+
+        @classmethod
+        def sample_random_from(cls, E: nn.Module, *args, **kwargs):
+            E.G[0].E = E
+            return super().sample_random_from(E.G[0], *args, **kwargs)
+
+        @torch.no_grad()
+        def init_to_target(self, target):
+            init_point = self.G[0].E(target).data 
+            self.init_point = init_point
+
+            if cls.__name__ == "WPlusVariable":
+                init_point = init_point.repeat(1, self.G[0].mapping.num_ws, 1)
+
+            if encoder_init:
+                self.data.copy_(init_point)
+
+
+        def before_step(self):
+            super().before_step()
+            nonlocal alpha
+            nonlocal truncation
+            alpha *= gamma
+            truncation *= gamma
+
+            with torch.no_grad():
+                anchor = self.init_point if towards_init_point else self.G[0].E(paste(self.to_image())).data.detach()
+
+                if cls.__name__ == "WPlusVariable":
+                    anchor = anchor.repeat(1, self.G[0].mapping.num_ws, 1)
+                
+                self.data.copy_(
+                    self.data.lerp(
+                        anchor, alpha
+                    ).lerp(self.G[0].mapping.w_avg.reshape(1, 1, -1), truncation)
+                )
+
+    return EncoderConstrained
+
+
+
+def update_statistics(G, num_samples=10_000):
+    if not hasattr(G.mapping, "conv"):
+        with torch.no_grad():
+            key = (
+                "use_adaconv"
+                if hasattr(G.mapping, "use_adaconv")
+                else "sample_for_adaconv"
+            )
+
+            temp_beta = G.mapping.w_avg_beta
+            temp_adaconv = getattr(G.mapping, key)
+
+            setattr(G.mapping, key, False)
+            G.mapping.w_avg_beta = 0.0
+            samples = G.mapping(torch.randn(num_samples, G.z_dim).cuda(), None)[:, 0, :]
+
+            G.mapping.w_avg_beta = temp_beta
+            setattr(G.mapping, key, temp_adaconv)
+            G.mapping.w_cov = (samples.t() @ samples) / len(samples) + torch.eye(
+                512
+            ).cuda() * 1e-6
+            G.mapping.w_cov_inv = G.mapping.w_cov.inverse()
+
+            U, S, V = G.mapping.w_cov.svd()
+            G.mapping.w_cov_inv_sqrt = U @ torch.diag_embed(S ** -0.5) @ V.t()

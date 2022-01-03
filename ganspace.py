@@ -1,12 +1,11 @@
 from inversion import *
 
-# todo consider gradient truncation as per https://research.cs.cornell.edu/langevin-mcmc/data/paper.pdf
-# todo try an LR rampup?
-
-from inversion.radam import RAdam
 
 METHOD = "adaconv"
-G_PATH = "pretrained/tmp.pkl"
+G_PATH = "pretrained/ffhq.pkl"
+
+NUM_BATCHES = 8
+NUM_DIRS = 10
 
 
 def compute_ganspace(G):
@@ -26,12 +25,15 @@ if __name__ == "__main__":
         G = open_generator(G_PATH).eval()
         D = open_discriminator(G_PATH)
 
-        U, S, V = cache(G_PATH, compute_ganspace(G), 17)
+        U, S, V = cache(G_PATH, compute_ganspace(G), NUM_BATCHES)
         origins = WVariable.sample_random_from(G, 8, truncation_psi=0.5).data
+        
         imgs = [WVariable(G, origins).to_image()]
-        for i in range(10):
+        for i in range(NUM_DIRS):
             imgs.append(
-                WVariable(G, origins + (V[i] * S[i] / 10).reshape(1, 1, 512)).to_image()
+                WVariable(
+                    G, origins + (V[i] * S[i] / math.sqrt(512)).reshape(1, 1, 512)
+                ).to_image()
             )
 
         save_image(torch.cat(imgs), "out/ganspace.png", nrow=len(origins))

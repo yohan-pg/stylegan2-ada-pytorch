@@ -40,7 +40,10 @@ class ToStyles(ABC, torch.nn.Module):
 
 Styles = torch.Tensor
 
-
 def dbg(x):
     print(x)
     return x
+
+def imview(image):
+    save_image(image, "tmp/tmp.png")
+    os.system("code tmp/tmp.png")

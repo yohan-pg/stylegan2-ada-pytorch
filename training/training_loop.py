@@ -595,7 +595,7 @@ def training_loop(
                     metric=metric,
                     G=snapshot_data["G_ema"],
                     dataset_kwargs=training_set_kwargs,
-                    num_gpus=num_gpus,
+                    numgpus=num_gpus,
                     rank=rank,
                     device=device,
                 )

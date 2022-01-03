@@ -1,41 +1,24 @@
-from inversion import *
-from edits import *
+from prelude import *
 
-METHOD = "adaconv"
-PATH = "out/upsample.png"
-G_PATH = "pretrained/tmp.pkl"
 
-BLUR = True
-SCALE = 40 
+#! we want upsampling interpolation (or no upsampling) for computing the loss, but nearest for the visualization?
+
+
+@dataclass(eq=False)
+class Upsample(Edit):
+    encoding_weight: ClassVar[float] = 10.0
+    truncation_weight: ClassVar[float] = 3.0
+
+    scale: int = 8
+
+    def f(self, pred):
+        return F.interpolate(
+            F.avg_pool2d(pred, self.scale),
+            scale_factor=self.scale,
+            mode="bicubic",
+            align_corners=False,
+        )
+
 
 if __name__ == "__main__":
-    G = open_generator(G_PATH).eval()
-    D = open_discriminator(G_PATH)
-    E = open_encoder("out/encoder_0.1/encoder-snapshot-000050.pkl")
-
-    target = open_target(
-        G,
-        "datasets/afhq2/test/cat/flickr_cat_000176.png",
-    )
-
-    def lift(x):
-        return blur(x, SCALE)
-
-    def present(x):
-        return F.interpolate(x, scale_factor=SCALE)
-
-    def paste(x):
-        return x - lift(x) + lift(target)
-
-    edit(
-        "upsample",
-        G,
-        E,
-        target, 
-        lift=lift,
-        paste=paste,
-        present=present, 
-        truncation_weight=0.05, 
-        encoding_weight=0.35,
-    )
-
+    run_edit_on_examples(Upsample())

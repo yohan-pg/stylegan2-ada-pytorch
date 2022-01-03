@@ -5,34 +5,34 @@ from .jittering import *
 from .io import *
 from .inversion import *
 
-import training.networks as networks
-
-import matplotlib.pyplot as plt
-
-def generator_with_len(self):
-    pass
-
 
 @dataclass(eq=False)
 class Inverter:
-    G: networks.Generator
+    G_or_E: networks.Generator
     num_steps: int
     variable_type: Type[Variable]
     criterion: InversionCriterion = VGGCriterion()
-    constraints: List[OptimizationConstraint] = None
     snapshot_frequency: int = 50
     seed: Optional[int] = 0
     create_schedule: None = None
     create_optimizer: None = None
-    ema_weight: float = 0.95
-    penalty: None = None
-    # step_every_n: int = 0.1
-
-    def __len__(self):
-        return self.num_steps // self.snapshot_frequency
+    penalty: Callable = None
+    extra_params: List[nn.Parameter] = field(default_factory=list)
+    parallel: bool = True
+    randomize: bool = False
+    gradient_scale: float = 1.0
 
     def __post_init__(self):
-        pass
+        if self.parallel:
+            self.G_or_E = Parallelize(self.G_or_E)
+
+    def __len__(self):
+        return self.num_steps
+
+    def __call__(self, *args, **kwargs):
+        for inversion, _ in self.all_inversion_steps(*args, **kwargs):
+            pass
+        return inversion
 
     @torch.enable_grad()
     def all_inversion_steps(self, target) -> Iterable[Inversion]:
@@ -56,76 +56,63 @@ class Inverter:
                     with torch.no_grad():
                         preds.append(variable.to_image())
 
-                yield Inversion(target, variables, losses, preds, self.ema), is_snapshot
+                yield Inversion(
+                    target, variables, losses, preds, eval=is_snapshot
+                ), is_snapshot
         except KeyboardInterrupt:
             pass
-        
-        return Inversion(target, variables, losses, preds, self.ema, final=True), True
 
-    def __call__(self, *args, **kwargs):
-        for inversion, _ in self.all_inversion_steps(*args, **kwargs):
-            pass
-        return inversion
+        return Inversion(target, variables, losses, preds, eval=True), True
 
     def sample_var(self, target):
         if isinstance(self.variable_type, Variable):
-            return self.variable_type.copy()
+            var = self.variable_type.copy()
         else:
-            return self.variable_type.sample_from(self.G, len(target))
+            var = (self.variable_type.sample_random_from if self.randomize else self.variable_type.sample_from)(self.G_or_E, len(target))
+            var.init_to_target(target)
 
-    def inversion_loop(self, target, variable) -> Iterable[Tuple[torch.Tensor, torch.Tensor]]:
-        
-        optimizer = self.create_optimizer(list(variable.parameters()))
-        self.ema = variable.copy()
+        return var
 
-        if self.create_schedule is not None: # todo use a dummy schedule instead
+    def inversion_loop(
+        self, target, variable
+    ) -> Iterable[Tuple[torch.Tensor, torch.Tensor]]:
+        optimizer = self.create_optimizer(
+            list(variable.parameters()) + list(self.extra_params)
+        )
+
+        if self.create_schedule is not None:
             schedule = self.create_schedule(optimizer)
         else:
             schedule = None
 
         loss = None
 
-        def compute_loss(do_backprop: bool = True):
+        def compute_loss():
             nonlocal loss
             pred = variable.to_image()
             loss = self.criterion(pred, target)
 
             expected_loss = loss.mean()
+            expected_loss += variable.penalty(pred, target)
 
             if self.penalty is not None:
-                expected_loss += self.penalty(pred)
-            
+                expected_loss += self.penalty(variable, pred, target)
+
             if loss.grad_fn is not None:
-                expected_loss.backward()
-            
+                (self.gradient_scale * expected_loss).backward()
+
             variable.before_step()
 
             return expected_loss
 
-        for i in range(self.num_steps + 1):
+        for _ in range(self.num_steps + 1):
             optimizer.zero_grad()
             optimizer.step(compute_loss)
 
-            # if i % self.step_every_n == 0:
-            if schedule is not None:
-                schedule.step()
             variable.after_step()
 
-            #!!!
-            # with torch.no_grad():
-            #     self.ema.data.copy_((1.0 - self.ema_weight) * variable.data.detach().clone() + self.ema_weight * self.ema.data)
-            
-            optimizer.zero_grad()
+            if schedule is not None:
+                schedule.step()
 
             yield loss.detach()
 
-
-# todo pass in init as an object
-# class CloseInitInverter(Inverter):
-#     def sample_var(self, target):
-#         return self.variable_type.find_init_point(self.G, target, VGGCriterion())
-
-
-# class KDTreeInitInverter(Inverter):
-#     def sample_var(self, target):
-#         return self.variable_type.find_init_point(self.G, target, VGGCriterion())

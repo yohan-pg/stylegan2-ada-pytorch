@@ -48,7 +48,7 @@ class StyleGANEncoderNet(nn.Module):
         head_gain: float = 1.0,
         w_plus=True,
         use_bn=True,
-        predict_residual_from_mean=True
+        predict_residual_from_mean=True,
     ):
         """Initializes the encoder with basic settings.
         Args:
@@ -109,8 +109,6 @@ class StyleGANEncoderNet(nn.Module):
                 out_channels = self.w_space_dim 
                 if w_plus:
                     out_channels *= 2 * block_idx
-                # if self.num_style_vectors > 1:
-                #     out_channels *= 4
 
                 self.add_module(
                     f"block{block_idx}",
@@ -123,14 +121,8 @@ class StyleGANEncoderNet(nn.Module):
                 )
 
                 if num_style_vectors > 1:
-                    self.heads = nn.Sequential(
-                        # Splitter(num_style_vectors, w_space_dim, out_channels, head_gain),
-                        # nn.ReLU(),
-                        Splitter(num_style_vectors, w_space_dim, out_channels, head_gain),
-                    )
-                    # self.heads = nn.TransformerEncoder(nn.TransformerEncoderLayer(512, 8, dropout = 0), 4)
-                    # self.embeddings = nn.Parameter(torch.randn(1, 512, 512).cuda() / math.sqrt(self.w_space_dim))
-
+                    self.heads = Splitter(num_style_vectors, w_space_dim, out_channels, head_gain),
+                    
             else:
                 self.add_module(
                     f"block{block_idx}",
@@ -184,7 +176,7 @@ class StyleGANEncoderNet(nn.Module):
             if self.init_mean is None and self.predict_residual_from_mean:
                 self.init_mean = self._forward(x).mean(dim=0, keepdim=True)
 
-        return self._forward(x) - (0.0 if self.init_mean is None else self.init_mean)
+        return self._forward(x) - (0.0 if self.init_mean is None else self.init_mean).to(x.device)
 
 
 class Splitter(nn.Module):

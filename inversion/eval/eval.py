@@ -3,7 +3,7 @@ from ..prelude import *
 from ..inverter import *
 
 from datetime import datetime
-import glob 
+import glob
 
 Result = Dict[str, torch.Tensor]
 Results = Dict[str, Result]
@@ -22,9 +22,7 @@ class Evaluation:
     def eval(self, experiment_name: str, dataloader: InvertedDataloader) -> Result:
         raise NotImplementedError
 
-    def create_artifacts(
-        self, target_dataloader: RealDataloader
-    ):
+    def create_artifacts(self, target_dataloader: RealDataloader):
         raise NotImplementedError
 
     def run(self, dataloaders: Dict[str, InvertedDataloader]) -> Results:
@@ -46,43 +44,48 @@ class Evaluation:
 
     def load_results_from_disk(self) -> Results:
         results = {}
-        
+
         for result_path in glob.glob(f"{self.out_dir}/**/result.pkl", recursive=True):
             name = "/".join(result_path.replace(self.out_dir + "/", "").split("/")[:-1])
             results[name] = pickle.load(open(result_path, "rb"))
-        
-        return results 
+
+        return results
 
     __call__ = run
 
+    table_stat: str = "losses"
+
     def make_table(self, results) -> None:
         file_path = f"{self.out_dir}/table.txt"
-        
+
         with open(file_path, "w") as file:
             print(f"## {self.name}", file=file)
             max_len_name = max(map(len, results.keys()))
             for experiment_name, result in results.items():
+                std = f"+- {result[self.table_stat].std().item():.04f}" if result[self.table_stat].ndim > 1 else ""
                 print(
-                    f"{experiment_name.ljust(max_len_name + 1, ' ')}: {result['losses'].mean().item():.04f} +- {result['losses'].std().item():.04f}",
+                    f"{experiment_name.ljust(max_len_name + 1, ' ')}: {result[self.table_stat].mean().item():.04f} {std}",
                     file=file,
                 )
 
     def make_histogram(self, results):
         for group_name in set([key.split("/")[1] for key in results.keys()]):
             plt.figure()
-            
+
             names = []
             losses = []
             for experiment_name, result in results.items():
                 if experiment_name.split("/")[1] == group_name:
-                    losses.append(result["losses"].cpu().numpy())
+                    losses.append(result[self.table_stat].cpu().numpy())
                     names.append(experiment_name)
-            
+
             plt.hist(losses)
             plt.xlim(left=0)
             plt.title(f"{self.name} Loss Distribution")
             plt.legend(names)
-            plt.savefig(f"{self.out_dir}/histogram_{group_name}.png")
+            name = f"{self.out_dir}/histogram_{group_name}"
+            plt.savefig(f"{name}.svg")
+            plt.savefig(f"{name}.png")
 
     @torch.no_grad()
     def make_plot(
@@ -93,7 +96,6 @@ class Evaluation:
         description = f"over {target_dataloader.num_images} images"
 
         for group_name in set([key.split("/")[1] for key in results.keys()]):
-
             plt.figure()
             plt.title(f"[min, Q1, median, Q3, max] {description}")
             plt.suptitle(
@@ -144,4 +146,6 @@ class Evaluation:
             plt.xlabel("Optimization Step")
             plt.ylabel("Reconstruction Error")
             plt.ylim(0)
-            plt.savefig(f"{self.out_dir}/plot_{group_name}.png")
+            name = f"{self.out_dir}/plot_{group_name}"
+            plt.savefig(f"{name}.svg")
+            plt.savefig(f"{name}.png")

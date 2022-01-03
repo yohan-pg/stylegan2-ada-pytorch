@@ -10,16 +10,14 @@ class Inversion:
         variables: List[Variable],
         losses: List[float],
         preds: List[torch.Tensor],
-        ema,
-        final=False
+        eval=False
     ):
         self.variables = variables
         self.target = target
         self.losses = losses
         self.preds = preds
-        self.ema = ema
 
-        if final:
+        if eval:
             for var in self.variables:
                 var.eval()
 

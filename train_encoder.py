@@ -1,61 +1,55 @@
-# Copyright (c) 2021, NVIDIA CORPORATION.  All rights reserved.
-#
-# NVIDIA CORPORATION and its licensors retain all intellectual property
-# and proprietary rights in and to this software, related documentation
-# and any modifications thereto.  Any use, reproduction, disclosure or
-# distribution of this software and related documentation without an express
-# license agreement from NVIDIA CORPORATION is strictly prohibited.
-
 from inversion import *
 from encoding import *
-import torchvision
-
-## todo priority
-# todo multigpu
-# todo loss curves
-# todo final vgg
-# todo final fid
-# todo save a validation batch
-
-## todo ideas
-# todo try encoding fakes instead? can we get that perfect?
+from datetime import datetime
 
 ## todo must haves
-# todo measure ppl + fid on final interpolations (+ validatin data)
-# todo improve persistence code to use their code snapshotting
-
-## todo to test enventually
-# todo train their W+
-# todo review bn and wscale -> How to not do group norm?
-# todo try training with a larger batch size
-
-## todo nice to have
+# todo implement ours with W+
 # todo loader workers
-# todo LR schedule
-# todo EMA
+# todo make sure that code snapshotting works (does the save fn need to be different)
+# todo eval_all_metrics on encoder predictions directly
 
-METHOD = "adaconv"
+## todo to test eventually
+# todo avoid the manual .cuda calls
+# todo reflection padding to avoid artifacts
+# todo try encoding fakes instead? can we get that perfect?
+# todo review bn and wscale -> How to not do group norm?
+# todo try training with a larger batch size. Is the quality better?
+# todo try a truncation penalty or something like that
+# todo try predicting S variable
+# todo try increasing the final style size. going from a single 512 vector to 512 other vectors of the same size is a bit crazy
+# todo try RAdam to avoid going crazy early in training?
+
+## todo finally
+# todo compare quality levels on real trainings
+
+#!! linear out is enabled
+
+NAME = "w_linear_out_test"
+METHOD = "adain"
 PKL_PATH = f"pretrained/tmp.pkl"
 
 GAIN = 1.0
 HEAD_GAIN = 1.0 if METHOD == "adaconv" else 1.0
 VARIABLE_TYPE = WVariable
-LEARNING_RATE = 1e-3 
-FINE_TUNE_DISCRIMINATOR = True
+LEARNING_RATE = 1e-3
 BETA_1 = 0.0
 BETA_2 = 0.999
 
-BATCH_SIZE = 4
+BATCH_SIZE = 1 #!!!
 SUBSET_SIZE = None
 DIST_WEIGHT = 1.0
-DISCR_WEIGHT = 0.1
+DISCR_WEIGHT = 0.1 #!!!
 
-OUTDIR=f"out/encoder_{DISCR_WEIGHT}"
+OUTDIR = f"encoder-training-runs/{NAME}/" + str(datetime.now()).split(".")[0].replace(
+    " ", "_"
+)
 
 if __name__ == "__main__":
-    os.makedirs(OUTDIR, exist_ok=True)
+    os.makedirs(
+        OUTDIR,
+    )
 
-    G, D = open_generator_and_discriminator(PKL_PATH)
+    G, D, training_set_kwargs = open_generator_and_discriminator(PKL_PATH)
 
     encoder = Encoder(
         G,
@@ -66,34 +60,65 @@ if __name__ == "__main__":
         lr=LEARNING_RATE,
         beta_1=BETA_1,
         beta_2=BETA_2,
-        fine_tune_discriminator=FINE_TUNE_DISCRIMINATOR,
         discriminator_weight=DISCR_WEIGHT,
-        distance_weight=DIST_WEIGHT
+        distance_weight=DIST_WEIGHT,
     )
 
     vgg = VGGCriterion()
-    criterion = lambda preds, targets: vgg(preds, targets) 
-    loader = EncodingDataset(path="./datasets/afhq256cat.zip").to_loader(
+    criterion = lambda preds, targets: vgg(preds, targets)
+    loader = EncodingDataset(path=training_set_kwargs["path"]).to_loader(
         batch_size=BATCH_SIZE,
         subset_size=SUBSET_SIZE,
     )
+    validation_loader = EncodingDataset(
+        path=training_set_kwargs["path"].replace(".zip", "_test.zip")
+    ).to_loader(
+        batch_size=BATCH_SIZE,
+        subset_size=None,
+    )
+    validation_targets = next(iter(validation_loader)).cuda()
+    writer = launch_tensorboard(OUTDIR)
 
-    for i, (preds, targets, loss) in enumerate(encoder.fit(loader, criterion)):
-        if i % 10 == 0:
-            print(loss.mean().item())
-            save_image(
-                encoder.make_prediction_grid(preds, targets),
-                f"{OUTDIR}/encoding.png",
-            )
+    print("Starting training...")
+    for i, (preds, targets, loss) in enumerate(
+        tqdm.tqdm(encoder.fit(loader, criterion))
+    ):
+        print(i)
 
-        if i % 100 == 0:
-            save_image(
-                encoder.make_interpolation_grid(targets),
-                f"{OUTDIR}/encoding_interpolation.png",
-            )
+        # def save_images(suffix):
+        #     save_image(
+        #         encoder.make_prediction_grid(preds, targets),
+        #         f"{OUTDIR}/encoding{suffix}.png",
+        #     )
+        # save_image(
+        #     encoder.make_interpolation_grid(targets),
+        #     f"{OUTDIR}/encoding_interpolation{suffix}.png",
+        # )
+        # save_image(
+        #     encoder.make_prediction_grid(
+        #         encoder(validation_targets).to_image(), validation_targets
+        #     ),
+        #     f"{OUTDIR}/encoding_validation{suffix}.png",
+        # )
+        # save_image(
+        #     encoder.make_interpolation_grid(validation_targets),
+        #     f"{OUTDIR}/encoding_interpolation_validation{suffix}.png",
+        # )
 
-        if i % 50_000 == 0:
-            save_pickle(
-                dict(E=encoder, G_ema=G, D=D),
-                os.path.join(OUTDIR, f"encoder-snapshot-{i//1_000:06d}.pkl"),
-            )
+        # with torch.no_grad():
+        #     writer.add_scalar("Loss/train", loss.mean().item(), i)
+
+        #     if i % 100 == 0:
+        #         writer.add_scalar(
+        #             "Loss/validation",
+        #             encoder.evaluate(targets, criterion)[-1].mean().item(),
+        #             i,
+        #         )
+
+        #     if i % 50_000 == 0:
+        #         tag = f"{i//1_000:06d}"
+        #         save_images(tag)
+        #         save_pickle(
+        #             dict(E=encoder, G_ema=G, D=D),
+        #             os.path.join(OUTDIR, f"encoder-snapshot-{tag}.pkl"),
+        #         )

@@ -7,13 +7,13 @@ import sys
 
 
 def run_eval(
-    label: str,
     target_dataloader: RealDataloader,
     variable_types: List[Type[Variable]],
     methods: Dict[str, networks.Generator],
     evaluations: List[Evaluation],
     num_steps: int,
     inverter_type: Type[Inverter],
+    label: str = "",
     peform_dry_run: bool = True,
     **kwargs,
 ) -> None:
@@ -26,11 +26,11 @@ def run_eval(
     else:
         runs = [True, False]
 
-    for dry_run in runs:
-        timestamp = create_eval_directory(label, dry_run)
+    for is_dry_run in runs:
+        timestamp = create_eval_directory(label, is_dry_run)
         target_dataloader = (
             target_dataloader
-            if not dry_run
+            if not is_dry_run
             else target_dataloader.subset(2 * target_dataloader.batch_size)
         )
 
@@ -44,7 +44,7 @@ def run_eval(
                     target_dataloader,
                     inverter_type(
                         G,
-                        num_steps=num_steps if not dry_run else 1,
+                        num_steps=num_steps if not is_dry_run else 1,
                         variable_type=variable_type,
                         seed=target_dataloader.seed,
                         **kwargs,
@@ -52,6 +52,7 @@ def run_eval(
                 )
 
             for evaluation in evaluations:
+                print(evaluation.name, flush=True)
                 evaluation(timestamp)(dataloaders)
 
     return timestamp

@@ -56,8 +56,6 @@ class EvalImageEditingConsistency(Evaluation):
                         edited_image,
                         second_inversion.final_pred,
                         unedited_image,
-                        (unedited_var * 1000.0).to_image(),
-                        (unedited_var * 0.1).to_image()
                     )
                 ),
                 f"{self.out_dir}/{experiment_name}/trace_{i}.png",

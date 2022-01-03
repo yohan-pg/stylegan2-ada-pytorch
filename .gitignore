@@ -1,9 +1,11 @@
 __pycache__/
 .cache/
 
+/tmp/
 /eval/
 /datasets/
 /training-runs/
+/encoder-training-runs/
 /stylegan2/
 /out/
 /pretrained/

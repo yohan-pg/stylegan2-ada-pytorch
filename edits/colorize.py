@@ -1,45 +1,33 @@
-from inversion import *
-from edits import *
+from prelude import *
 
-from kornia.color import RgbToHsv
+from kornia.color import rgb_to_lab, lab_to_rgb
 
-METHOD = "adaconv"
-PATH = "out/colorize.png"
-G_PATH = "pretrained/tmp.pkl"
+#! it looks like the clamping is what causes the hue issues?
+
+#! alignment isn't always great
+
+@dataclass(eq=False)
+class Colorize(Edit):
+    encoding_weight: ClassVar[float] = 2.0
+    truncation_weight: ClassVar[float] = 100.0 #!!
+
+    chroma_loss_weight: float = 1e-4
+    chroma_objective: float = 20.0
+
+    def f(self, x):
+        x = rgb_to_lab(x.clamp(min=0.0, max=1.0)) #! clamping is not ideal
+        x[:, 1:, :, :] *= 0
+        return lab_to_rgb(x, clip=False)
+
+    # def penalty(self, variable, pred, target):
+    #     chroma = rgb_to_lab(pred.clamp(min=0.0, max=1.0))[:, 1:, :, :]
+    #     return (
+    #         self.chroma_loss_weight
+    #         * (chroma.norm(dim=1) - self.chroma_objective)
+    #         .pow(2.0)
+    #         .mean()
+    #     )
+
 
 if __name__ == "__main__":
-    G = open_generator(G_PATH).eval()
-    E = open_encoder("out/encoder_0.1/encoder-snapshot-000050.pkl")
-
-    target = open_target(
-        G,
-        "datasets/afhq2/test/cat/pixabay_cat_002905.png",
-        "datasets/afhq2_cat256_test/00000/img00000162.png",
-        "datasets/afhq2_cat256_test/00000/img00000195.png",
-    )
-
-    def to_grayscale(x):
-        return x.mean(dim=1, keepdim=True).repeat_interleave(3, dim=1)
-
-    grayscale_target = to_grayscale(target)
-
-    def paste(x):
-        return grayscale_target + x - to_grayscale(x)
-
-    def image_saturation(x):
-        return x.std(dim=1, keepdim=True)
-
-    def saturation_loss(pred):
-        return -image_saturation(pred).mean()
-
-    edit(
-        "colorize",
-        G,
-        E,
-        target,
-        lift=to_grayscale,
-        paste=paste,
-        encoding_weight=0.2,
-        truncation_weight=0.05,
-        penalty = saturation_loss
-    )
+    run_edit_on_examples(Colorize())
