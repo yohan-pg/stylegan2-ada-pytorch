@@ -9,12 +9,14 @@ class Inversion:
         target: nn.Module,
         variables: List[Variable],
         losses: List[float],
+        penalties: List[float],
         preds: List[torch.Tensor],
         eval=False
     ):
         self.variables = variables
         self.target = target
         self.losses = losses
+        self.penalties = penalties
         self.preds = preds
 
         if eval:
@@ -37,6 +39,20 @@ class Inversion:
         plt.ylim(0, 0.5)
         plt.xlabel("Optimization steps")
         plt.ylabel("Reconstruction loss")
+        plt.savefig(out_path)
+
+    @staticmethod
+    def save_regularization_plot(inversions: List["Inversion"], out_path: str) -> None:
+        plt.figure()
+        plt.title("Regularization loss per step")
+        for name, inversion in reversed(inversions.items()):
+            for penalties_list in torch.stack(inversion.penalties, dim=1):
+                plt.plot(penalties_list.detach().cpu(), label=name)
+        plt.legend()
+
+        plt.ylim(0, 0.5)
+        plt.xlabel("Optimization steps")
+        plt.ylabel("Regularization loss")
         plt.savefig(out_path)
 
     def move_to_cuda(self):

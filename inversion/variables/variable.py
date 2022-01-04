@@ -120,4 +120,4 @@ class Variable(ToStyles, ABC, nn.Module, ParametrizableClass):
         pass
 
     def penalty(self, pred, target):
-        return 0.0
+        return torch.tensor([0.0]).cuda()

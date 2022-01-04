@@ -15,7 +15,7 @@ class EvalImageEditingConsistency(Evaluation):
 
         for i, inversion in enumerate(dataloader):
             target_2_var = inverter.variable_type.sample_random_from(
-                inverter.G, batch_size=len(inversion.target)
+                inverter.G_or_E, batch_size=len(inversion.target)
             )
 
             edit = (target_2_var - inversion.final_variable) * self.alpha 

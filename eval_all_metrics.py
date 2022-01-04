@@ -2,48 +2,44 @@ from inversion import *
 from inversion.eval import *
 
 if __name__ == "__main__":
-    # for level in [1.0]:
-        evaluations = [
-            EvalReconstructionQuality,
-            # EvalInterpolationQuality,
-            # EvalImageEditingConsistency,
-        ]
+    evaluations = [
+        EvalReconstructionQuality,
+        # EvalInterpolationQuality,
+        # EvalImageEditingConsistency,
+    ]
 
-        target_dataloader = RealDataloader(
-            "datasets/afhq2_cat256_test.zip",
-            batch_size=4,
-            num_images=4,
-            fid_data_path="datasets/afhq2_cat256",
-        )
+    target_dataloader = RealDataloader(
+        "datasets/afhq2_cat256_test.zip",
+        batch_size=4,
+        num_images=8,
+        fid_data_path="datasets/afhq2_cat256",
+    )
 
-        if True:
-            timestamp = run_eval(
-                inverter_type=Inverter,
-                label="",
-                evaluations=evaluations,
-                peform_dry_run=False,
-                target_dataloader=target_dataloader,
-                variable_types=[
-                    add_soft_encoder_constraint(WVariable, 1.0, 0.0),
-                ],
-                num_steps=500,
-                methods={
-                    "AdaConv": open_encoder(
-                        "encoder-training-runs/encoder_0.1/encoder-snapshot-000100.pkl"
-                    ),
-                    # "AdaIn": open_encoder(
-                    #     "encoder-training-runs/encoder_0.1_baseline/encoder-snapshot-000100.pkl"
-                    # ),
-                },
-                criterion=VGGCriterion(),
-                create_optimizer=lambda params: torch.optim.Adam(params, lr=0.1),
-                create_schedule=lambda optimizer: lr_scheduler.LambdaLR(
-                    optimizer, lambda epoch: min(1.0, epoch / 100.0)
+    if True:
+        timestamp = run_eval(
+            inverter_type=Inverter,
+            label="",
+            evaluations=evaluations,
+            peform_dry_run=False,
+            target_dataloader=target_dataloader,
+            variable_types=[
+                add_soft_encoder_constraint(WPlusVariable, 0.0, 0.002),
+            ],
+            num_steps=1000,
+            methods={
+                "AdaConv": open_encoder(
+                    "encoder-training-runs/encoder_0.1/encoder-snapshot-000100.pkl"
                 ),
-            )
-            create_artifacts(timestamp, target_dataloader, evaluations)
-        else:
-            create_artifacts("2021-11-25_20:01:36", target_dataloader, evaluations)
+                "AdaIn": open_encoder(
+                    "encoder-training-runs/encoder_0.1_baseline/encoder-snapshot-000100.pkl"
+                ),
+            },
+            criterion=VGGCriterion(),
+            create_optimizer=lambda params: torch.optim.Adam(params, lr=0.02),
+        )
+        create_artifacts(timestamp, target_dataloader, evaluations)
+    else:
+        create_artifacts("2021-11-25_20:01:36", target_dataloader, evaluations)
 
 
 #! dry run in broken

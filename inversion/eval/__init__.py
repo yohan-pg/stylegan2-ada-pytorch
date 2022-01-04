@@ -61,11 +61,12 @@ def run_eval(
 def create_eval_directory(label: str, dry_run: bool) -> str:
     os.makedirs("eval", exist_ok=True)
 
-    prefix = "" if label == "" else label + "_"
     if dry_run:
-        timestamp = "_dry_run" + prefix
+        timestamp = "_dry_run"
     else:
-        timestamp = prefix + str(datetime.now()).split(".")[0].replace(" ", "_")
+        timestamp = str(datetime.now()).split(".")[0].replace(" ", "_")
+
+    timestamp += "" if label == "" else label + "_"
 
     fresh_dir(f"eval/{timestamp}")
     shutil.copyfile(sys.argv[0], f"eval/{timestamp}/config.txt")
@@ -79,10 +80,6 @@ def create_artifacts(
     for evaluation in evaluations:
         evaluation(timestamp).create_artifacts(target_dataloader)
     join_evaluation_tables(timestamp)
-
-
-def create_montage(timestamp: str) -> None:
-    pass
 
 
 def join_evaluation_tables(timestamp: str) -> None:

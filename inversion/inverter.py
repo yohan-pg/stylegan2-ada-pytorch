@@ -41,14 +41,16 @@ class Inverter:
 
         variables = []
         losses = []
+        penalties = []
         preds = []
 
         variable = self.sample_var(target)
         variables.append(variable)
 
         try:
-            for i, loss in enumerate(self.inversion_loop(target, variable)):
+            for i, (loss, penalty) in enumerate(self.inversion_loop(target, variable)):
                 losses.append(loss)
+                penalties.append(penalty)
 
                 is_snapshot = i % self.snapshot_frequency == 0
                 if is_snapshot:
@@ -57,18 +59,22 @@ class Inverter:
                         preds.append(variable.to_image())
 
                 yield Inversion(
-                    target, variables, losses, preds, eval=is_snapshot
+                    target, variables, losses, penalties, preds, eval=is_snapshot
                 ), is_snapshot
         except KeyboardInterrupt:
             pass
 
-        return Inversion(target, variables, losses, preds, eval=True), True
+        return Inversion(target, variables, losses, penalties, preds, eval=True), True
 
     def sample_var(self, target):
         if isinstance(self.variable_type, Variable):
             var = self.variable_type.copy()
         else:
-            var = (self.variable_type.sample_random_from if self.randomize else self.variable_type.sample_from)(self.G_or_E, len(target))
+            var = (
+                self.variable_type.sample_random_from
+                if self.randomize
+                else self.variable_type.sample_from
+            )(self.G_or_E, len(target))
             var.init_to_target(target)
 
         return var
@@ -86,24 +92,26 @@ class Inverter:
             schedule = None
 
         loss = None
+        penalty = None
 
         def compute_loss():
             nonlocal loss
+            nonlocal penalty
             pred = variable.to_image()
             loss = self.criterion(pred, target)
 
             expected_loss = loss.mean()
-            expected_loss += variable.penalty(pred, target)
+            penalty = variable.penalty(pred, target)
 
             if self.penalty is not None:
-                expected_loss += self.penalty(variable, pred, target)
+                penalty += self.penalty(variable, pred, target)
 
             if loss.grad_fn is not None:
-                (self.gradient_scale * expected_loss).backward()
+                (self.gradient_scale * (expected_loss + penalty)).backward()
 
             variable.before_step()
 
-            return expected_loss
+            return expected_loss + penalty
 
         for _ in range(self.num_steps + 1):
             optimizer.zero_grad()
@@ -114,5 +122,4 @@ class Inverter:
             if schedule is not None:
                 schedule.step()
 
-            yield loss.detach()
-
+            yield loss.detach(), penalty.detach()
