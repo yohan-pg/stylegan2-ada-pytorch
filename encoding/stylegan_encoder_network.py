@@ -12,6 +12,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 
+import torch_utils.persistence as persistence
+
 __all__ = ["StyleGANEncoderNet"]
 
 # Resolutions allowed.
@@ -21,6 +23,7 @@ _RESOLUTIONS_ALLOWED = [8, 16, 32, 64, 128, 256, 512, 1024]
 _INIT_RES = 4
 
 
+@persistence.persistent_class
 class StyleGANEncoderNet(nn.Module):
     """Defines the encoder network for StyleGAN inversion.
     NOTE: The encoder takes images with `RGB` color channels and range [-1, 1]
@@ -31,6 +34,7 @@ class StyleGANEncoderNet(nn.Module):
     def configure_for(G, **kwargs):
         return StyleGANEncoderNet(
             w_space_dim=G.w_dim,
+            num_ws=G.mapping.num_ws,
             resolution=G.img_resolution,
             num_style_vectors=G.num_required_vectors(),
             **kwargs,
@@ -48,6 +52,8 @@ class StyleGANEncoderNet(nn.Module):
         head_gain: float = 1.0,
         w_plus=True,
         use_bn=True,
+        single_layer_adaconv=False,
+        num_ws: int = 1,
     ):
         """Initializes the encoder with basic settings.
         Args:
@@ -86,6 +92,7 @@ class StyleGANEncoderNet(nn.Module):
         self.num_blocks = int(np.log2(resolution))
         # Layers used in generator.
         self.num_layers = int(np.log2(self.resolution // self.init_res * 2)) * 2
+        self.single_layer_adaconv = single_layer_adaconv
 
         in_channels = self.image_channels
         out_channels = self.encoder_channels_base
@@ -102,7 +109,6 @@ class StyleGANEncoderNet(nn.Module):
                 )
             elif block_idx == self.num_blocks - 1:
                 in_channels = in_channels * self.init_res * self.init_res
-                assert not (w_plus and self.num_style_vectors > 1)
 
                 out_channels = self.w_space_dim
                 if w_plus:
@@ -114,15 +120,19 @@ class StyleGANEncoderNet(nn.Module):
                         in_channels=in_channels,
                         out_channels=out_channels,
                         use_wscale=True,
-                        use_bn=self.use_bn,
+                        use_bn=True,
                     ),
                 )
 
                 if num_style_vectors > 1:
-                    self.heads = Splitter(
-                        num_style_vectors, w_space_dim, out_channels, head_gain
+                    self.heads = (
+                        SingleLayer if self.single_layer_adaconv else Splitter
+                    )(
+                        num_style_vectors,
+                        w_space_dim,
+                        out_channels,
+                        num_ws if w_plus else 1,
                     )
-
             else:
                 self.add_module(
                     f"block{block_idx}",
@@ -148,7 +158,6 @@ class StyleGANEncoderNet(nn.Module):
 
         if self.num_style_vectors > 1:
             return self.heads(x)
-            # return self.heads((x.reshape(-1, 1, 512).repeat(1, 512, 1) + self.embeddings).transpose(0, 1)).transpose(0, 1)
         else:
             return x.reshape(x.shape[0], -1, self.w_space_dim)
 
@@ -170,7 +179,7 @@ class StyleGANEncoderNet(nn.Module):
 
 
 class Splitter(nn.Module):
-    def __init__(self, num_style_vectors, w_space_dim, out_channels, head_gain):
+    def __init__(self, num_style_vectors, w_space_dim, out_channels, num_ws):
         super().__init__()
         self.heads = nn.Parameter(
             torch.randn(
@@ -178,16 +187,51 @@ class Splitter(nn.Module):
                 w_space_dim,
                 out_channels,
             )
-            / head_gain
         )
-        self.head_gain = head_gain
 
         with torch.no_grad():
-            # * kaiming normal init on with fan in & fan out
             self.heads /= math.sqrt((out_channels + w_space_dim) / 2)
 
+        assert not num_ws > 1
+
     def forward(self, x):
-        return (self.heads @ x.t()).transpose(2, 1).transpose(1, 0) * self.head_gain
+        return (self.heads @ x.t()).transpose(2, 1).transpose(1, 0)
+
+
+class SingleLayer(nn.Module):
+    def __init__(self, num_style_vectors, w_space_dim, out_channels, num_ws):
+        super().__init__()
+        self.num_style_vectors = num_style_vectors
+        self.w_space_dim = w_space_dim
+        self.num_ws = num_ws
+        self.layers = [
+            nn.Sequential(
+                nn.Linear(out_channels, out_channels // num_ws),
+                nn.Linear(out_channels // num_ws, num_style_vectors * w_space_dim),
+            ).cuda()
+            for _ in range(num_ws)
+        ]
+
+        for layer in self.layers:
+            with torch.no_grad():
+                nn.init.zeros_(layer[0].bias)
+                nn.init.normal_(layer[0].weight)
+                layer[0].weight /= math.sqrt(out_channels)
+
+                nn.init.zeros_(layer[-1].bias)
+                nn.init.normal_(layer[-1].weight)
+                layer[-1].weight /= math.sqrt(out_channels // num_ws)  #!!!
+
+    def forward(self, x):
+        return torch.cat(
+            [
+                layer(x).reshape(
+                    -1, self.num_style_vectors, self.w_space_dim
+                )
+                for layer in self.layers
+            ],
+            dim=1,
+        )
 
 
 class AveragePoolingLayer(nn.Module):
@@ -274,7 +318,7 @@ class FirstBlock(nn.Module):
             ),
         )
         self.scale = wscale_gain / np.sqrt(in_channels * 3 * 3) if use_wscale else 1.0
-        self.bn = nn.GroupNorm(1, out_channels) if use_bn else nn.Identity()
+        self.bn = Normalization(out_channels) if use_bn else nn.Identity()
 
         if activation_type == "linear":
             self.activate = nn.Identity()
@@ -332,7 +376,7 @@ class ResBlock(nn.Module):
                 bias=False,
             )
             self.scale = wscale_gain / np.sqrt(in_channels) if use_wscale else 1.0
-            self.bn = nn.GroupNorm(1, out_channels) if use_bn else nn.Identity()
+            self.bn = Normalization(out_channels) if use_bn else nn.Identity()
         else:
             self.add_shortcut = False
             self.identity = nn.Identity()
@@ -358,7 +402,7 @@ class ResBlock(nn.Module):
             kernel_size=3,
             gain=wscale_gain,
         )
-        self.bn1 = nn.GroupNorm(1, hidden_channels) if use_bn else nn.Identity()
+        self.bn1 = Normalization(hidden_channels) if use_bn else nn.Identity()
 
         # Second convolutional block.
         self.conv2 = nn.Sequential(
@@ -380,7 +424,7 @@ class ResBlock(nn.Module):
             kernel_size=3,
             gain=wscale_gain,
         )
-        self.bn2 = nn.GroupNorm(1, out_channels) if use_bn else nn.Identity()
+        self.bn2 = Normalization(out_channels) if use_bn else nn.Identity()
 
         if activation_type == "linear":
             self.activate = nn.Identity()
@@ -413,10 +457,14 @@ class LastBlock(nn.Module):
             in_features=in_channels, out_features=out_channels, bias=False
         )
         self.scale = wscale_gain / np.sqrt(in_channels) if use_wscale else 1.0
-        self.bn = nn.GroupNorm(1, out_channels) if use_bn else nn.Identity()
+        self.bn = Normalization(out_channels) if use_bn else nn.Identity()
 
     def forward(self, x):
         x = x.view(x.shape[0], -1)
         x = self.fc(x) * self.scale
         x = x.view(x.shape[0], x.shape[1], 1, 1)
         return self.bn(x).view(x.shape[0], x.shape[1])
+
+
+def Normalization(*args, **kwargs):
+    return nn.GroupNorm(8, *args, **kwargs)

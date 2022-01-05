@@ -63,7 +63,7 @@ if __name__ == "__main__":
     inverter = Inverter(
         G,
         5000,
-        variable_type=add_encoder_constraint(WVariable, E, 0.1, 0.05, paste(target)),
+        variable=add_encoder_constraint(WVariable, E, 0.1, 0.05, paste(target)),
         create_optimizer=lambda params: AdamWithNoise(params, lr=0.1),
         create_schedule=lambda optimizer: lr_scheduler.LambdaLR(
             optimizer, lambda epoch: min(1.0, epoch / 100.0)

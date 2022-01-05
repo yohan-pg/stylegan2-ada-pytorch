@@ -30,6 +30,8 @@ class Encoder(nn.Module):
         self.fine_tune_discriminator = discriminator_weight > 0.0
         self.G = [G]
         self.D = [D]
+        D.train()
+        D.requires_grad_(True)
         self.network = nn.parallel.DataParallel(
             StyleGANEncoderNet.configure_for(
                 G,
@@ -112,6 +114,7 @@ class Encoder(nn.Module):
     def make_interpolation_grid(
         self, targets: torch.Tensor, max_size=6
     ) -> torch.Tensor:
+        assert targets.shape[0] >= 2
         with torch.no_grad():
             grids = []
 

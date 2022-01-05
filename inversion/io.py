@@ -59,6 +59,19 @@ def open_discriminator(pkl_path: str):
         return legacy.load_network_pkl(fp)["D"].cuda().eval()
 
 
+def open_model(pkl_path: str):
+    print(f"Loading {pkl_path}...")
+
+    if pkl_path.split("/")[0] == "encoder-training-runs":
+        E = open_encoder(pkl_path)
+        G = E.G[0]
+        G_or_E = E
+    else:
+        G = open_generator(pkl_path)
+        G_or_E = G
+    return G, G_or_E
+
+
 import shelve
 
 

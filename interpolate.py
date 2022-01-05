@@ -1,25 +1,18 @@
-# todo project a single
-
 from inversion import *
 from training.networks import *
 
 if False:
     METHOD = "adain"
-    G_PATH = "pretrained/no_torgb_adain_tmp.pkl"
-    E_PATH = "encoder-training-runs/encoder_0.1_baseline/encoder-snapshot-000100.pkl"
+    # PATH = "pretrained/no_torgb_adain_tmp.pkl"
+    PATH = "encoder-training-runs/encoder_0.1_baseline/encoder-snapshot-000100.pkl"
 else:
     METHOD = "adaconv"
-    G_PATH = "pretrained/ffhq.pkl"
-    E_PATH = "encoder-training-runs/encoder_0.1/encoder-snapshot-000100.pkl"
+    # PATH = "pretrained/ffhq.pkl"
+    PATH = "encoder-training-runs/encoder_0.0/2022-01-04_23:24:05/encoder-snapshot-000050.pkl"
 
-DISABLE_NORMALIZE = False
-FORCE_NORMALIZE = False
-FORCE_LERP = False
-SAME_SEED = True
-SEQUENTIAL = False
 
 VARIABLE_TYPE = add_soft_encoder_constraint(WPlusVariable, 0.0, 10.0, encoder_init=True)
-NUM_STEPS = 250
+NUM_STEPS = 50
 CRITERION_TYPE = VGGCriterion
 SNAPSHOT_FREQ = 50
 
@@ -33,6 +26,8 @@ TARGET_A_PATH = "datasets/afhq2/test/cat/pixabay_cat_000117.png"
 TARGET_B_PATH = "datasets/afhq2/train/cat/flickr_cat_000539.png"
 
 SEED = 2
+SAME_SEED = True
+SEQUENTIAL = False
 
 print(VARIABLE_TYPE.__name__)
 OUT_DIR = f"out/interpolate/{METHOD}/{VARIABLE_TYPE.__name__}"
@@ -40,31 +35,17 @@ OUT_DIR = f"out/interpolate/{METHOD}/{VARIABLE_TYPE.__name__}"
 if __name__ == "__main__":
     fresh_dir(OUT_DIR)
 
-    # G = open_generator("pretrained/cond.pkl")
-    E = open_encoder(E_PATH)
-    G = E.G[0]
-    # init = False
-
-    if DISABLE_NORMALIZE:
-        G.mapping.normalize = False
-    if FORCE_NORMALIZE:
-        G.mapping.normalize = True
-    if FORCE_LERP:
-        ZVariable.interpolate = WVariable.interpolate
-
-    criterion = CRITERION_TYPE()
+    G, G_or_E = open_model(PATH)
 
     def invert_target(target: torch.Tensor, name: str, variable_type: Variable):
         inverter = Inverter(
-            # G,
-            E,  #! should be G_or_E
-            variable_type=variable_type,
+            G_or_E,
+            variable=variable_type,
             num_steps=NUM_STEPS,
-            criterion=criterion,
-            create_optimizer=lambda params: torch.optim.Adam(params, lr=0.02),  
+            criterion=CRITERION_TYPE(),
+            create_optimizer=lambda params: torch.optim.Adam(params, lr=0.02),
             snapshot_frequency=SNAPSHOT_FREQ,
             seed=SEED if SAME_SEED else None,
-            gradient_scale=1000.0,
         )
         try:
             for inversion, snapshot_iter in tqdm.tqdm(
@@ -80,7 +61,6 @@ if __name__ == "__main__":
     torch.manual_seed(SEED)
 
     target_A = sample_image(G) if AIM_FOR_FAKE_A else (open_target(G, TARGET_A_PATH))
-
     target_B = sample_image(G) if AIM_FOR_FAKE_B else (open_target(G, TARGET_B_PATH))
 
     try:

@@ -100,7 +100,7 @@ class Edit(nn.Module):
         inverter = Inverter(
             E,
             num_steps,
-            variable_type=(
+            variable=(
                 add_soft_encoder_constraint
                 if self.soft_constraint
                 else add_hard_encoder_constraint
@@ -201,7 +201,7 @@ class Edit(nn.Module):
         inverter = Inverter(
             E,
             num_steps,
-            variable_type=E.variable_type.from_variable(inversion.final_variable),
+            variable=E.variable_type.from_variable(inversion.final_variable),
             create_optimizer=lambda params: torch.optim.Adam(
                 params, lr=self.learning_rate
             ),

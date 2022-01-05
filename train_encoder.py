@@ -2,41 +2,36 @@ from inversion import *
 from encoding import *
 from datetime import datetime
 
-#!!! dataloder is messed up, I was trying to fix workers
-
 ## todo must haves
-# tood fix interpolation grid
-# todo fix discriminator losss -> I'm not sure it works anymore, I add requires_grad_ in DBoth
-# todo loader workers
-# todo implement ours with W+
-# todo make sure that code snapshotting works (does the save fn need to be different)
-# todo figure out how to run eval_all_metrics on encoder predictions directly
-# todo try to add a w_mean regularization, in order to make interpolation work again
+# todo why does the single layer fail again?
+# todo vectorize w+
+# todo double check if interpolation is good now
+# todo if it isnt, try to add a w_mean regularization, in order to make interpolation work again? 
 
 ## todo to test eventually
-# todo try encoding fakes instead? can we get that perfect?
-# todo review bn and wscale -> How to not do group norm?
+# todo find a better solution for w+? why is it so bad?
 # todo try training with a larger batch size. Is the quality better?
 # todo try increasing the final style size. going from a single 512 vector to 512 other vectors of the same size is a bit crazy
+# todo try encoding fakes instead? can we get that perfect?
 # todo try RAdam to avoid going crazy early in training?
-# todo try predicting S variable
+# todo try predicting S variable?
 # todo hyperparam search for the ideal discr_weight
+# todo try a better architecture (residual?)
 
-NAME = "test"
-METHOD = "adain"
-PKL_PATH = f"pretrained/tmp.pkl"
+NAME = "encoder_0.0"
+METHOD, PKL_PATH = "adaconv", f"pretrained/no_torgb_adaconv_tmp.pkl"
 
 GAIN = 1.0
 HEAD_GAIN = 1.0 if METHOD == "adaconv" else 1.0
 VARIABLE_TYPE = WVariable
-LEARNING_RATE = 1e-4 #!!! was 1e-3
+LEARNING_RATE = 1e-3 
 BETA_1 = 0.0
 BETA_2 = 0.999
 
-BATCH_SIZE = 2 #!!!
-SUBSET_SIZE = 2 #!!!
+BATCH_SIZE = 4
+SUBSET_SIZE = None 
 DIST_WEIGHT = 1.0
-DISCR_WEIGHT = 0.1
+DISCR_WEIGHT = 0.0 
 
 OUTDIR = f"encoder-training-runs/{NAME}/" + str(datetime.now()).split(".")[0].replace(
     " ", "_"
@@ -60,6 +55,7 @@ if __name__ == "__main__":
         beta_2=BETA_2,
         discriminator_weight=DISCR_WEIGHT,
         distance_weight=DIST_WEIGHT,
+        single_layer_adaconv=False
     )
 
     vgg = VGGCriterion()
@@ -86,20 +82,22 @@ if __name__ == "__main__":
                 encoder.make_prediction_grid(preds, targets),
                 f"{OUTDIR}/encoding{suffix}.png",
             )
-            # save_image(
-            #     encoder.make_interpolation_grid(targets),
-            #     f"{OUTDIR}/encoding_interpolation{suffix}.png",
-            # )
+            if BATCH_SIZE > 1:
+                save_image(
+                    encoder.make_interpolation_grid(targets),
+                    f"{OUTDIR}/encoding_interpolation{suffix}.png",
+                )
             save_image(
                 encoder.make_prediction_grid(
                     encoder(validation_targets).to_image(), validation_targets
                 ),
                 f"{OUTDIR}/encoding_validation{suffix}.png",
             )
-            # save_image(
-            #     encoder.make_interpolation_grid(validation_targets),
-            #     f"{OUTDIR}/encoding_interpolation_validation{suffix}.png",
-            # )
+            if BATCH_SIZE > 1:
+                save_image(
+                    encoder.make_interpolation_grid(validation_targets),
+                    f"{OUTDIR}/encoding_interpolation_validation{suffix}.png",
+                )
 
         with torch.no_grad():
             writer.add_scalar("Loss/train", loss.mean().item(), i)

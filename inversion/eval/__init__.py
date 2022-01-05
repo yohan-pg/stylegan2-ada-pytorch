@@ -45,7 +45,7 @@ def run_eval(
                     inverter_type(
                         G,
                         num_steps=num_steps if not is_dry_run else 1,
-                        variable_type=variable_type,
+                        variable=variable_type,
                         seed=target_dataloader.seed,
                         **kwargs,
                     ),

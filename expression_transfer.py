@@ -3,9 +3,9 @@ from edits.prelude import *
 from inversion import *
 from training.networks import *
 
-if False:
+if True:
     METHOD = "adain"
-    G_PATH = "pretrained/no_torgb_adain_tmp.pkl"
+    G_PATH = "encoder-training-runs/encoder_ffhq_0.1/encoder-snapshot-000050.pkl"
 else:
     METHOD = "adaconv"
     E_PATH = "encoder-training-runs/encoder_ffhq_0.1/encoder-snapshot-000050.pkl"
@@ -40,7 +40,7 @@ if __name__ == "__main__":
     def invert_target(target: torch.Tensor, name: str, variable_type: Variable):
         inverter = Inverter(
             E,
-            variable_type=variable_type,
+            variable=variable_type,
             num_steps=NUM_STEPS,
             criterion=1000 * criterion,
             create_optimizer=lambda params: torch.optim.Adam(params, lr=1.0),

@@ -17,7 +17,7 @@ if __name__ == "__main__":
         adaconv,
         num_steps=500,
         learning_rate=0.01,
-        variable_type=WPlusVariable,
+        variable=WPlusVariable,
         snapshot_frequency=1
     )(target)
 
@@ -25,7 +25,7 @@ if __name__ == "__main__":
         adain,
         num_steps=500,
         learning_rate=0.01,
-        variable_type=WPlusVariable,
+        variable=WPlusVariable,
         snapshot_frequency=1
     )(target)
 

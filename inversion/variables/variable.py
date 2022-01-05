@@ -101,7 +101,6 @@ class Variable(ToStyles, ABC, nn.Module, ParametrizableClass):
             assert truncation.ndim == 1
             assert len(truncation) == self.G[0].mapping.num_ws
             truncation = truncation.repeat_interleave(self.G[0].num_required_vectors())
-
         return (
             self.G[0].synthesis(
                 mu.lerp(styles, truncation.reshape(1, -1, 1)),

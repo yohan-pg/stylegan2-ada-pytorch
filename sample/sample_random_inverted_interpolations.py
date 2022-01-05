@@ -49,6 +49,6 @@ if __name__ == "__main__":
                     G,
                     num_steps=300,
                     learning_rate=0.03,
-                    variable_type=variable_type,
+                    variable=variable_type,
                 ),
             )
