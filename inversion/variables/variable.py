@@ -24,7 +24,8 @@ class Variable(ToStyles, ABC, nn.Module, ParametrizableClass):
         return self.__class__(self.G[0], data)
 
     def detach(self):
-        return self.from_data(self.data.detach())
+        data = self.data.detach().requires_grad_(self.data.requires_grad)
+        return self.from_data(data)
 
     def roll(self, n: int):
         return self.from_data(self.data.roll(n, 0))

@@ -10,7 +10,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import math 
+import math
 
 __all__ = ["StyleGANEncoderNet"]
 
@@ -26,14 +26,14 @@ class StyleGANEncoderNet(nn.Module):
     NOTE: The encoder takes images with `RGB` color channels and range [-1, 1]
     as inputs, and encode the input images to W+ space of StyleGAN.
     """
-    
+
     @staticmethod
     def configure_for(G, **kwargs):
         return StyleGANEncoderNet(
             w_space_dim=G.w_dim,
-            resolution=G.img_resolution, 
+            resolution=G.img_resolution,
             num_style_vectors=G.num_required_vectors(),
-            **kwargs
+            **kwargs,
         )
 
     def __init__(
@@ -48,7 +48,6 @@ class StyleGANEncoderNet(nn.Module):
         head_gain: float = 1.0,
         w_plus=True,
         use_bn=True,
-        predict_residual_from_mean=True,
     ):
         """Initializes the encoder with basic settings.
         Args:
@@ -101,12 +100,11 @@ class StyleGANEncoderNet(nn.Module):
                         use_bn=self.use_bn,
                     ),
                 )
-
             elif block_idx == self.num_blocks - 1:
                 in_channels = in_channels * self.init_res * self.init_res
                 assert not (w_plus and self.num_style_vectors > 1)
-                
-                out_channels = self.w_space_dim 
+
+                out_channels = self.w_space_dim
                 if w_plus:
                     out_channels *= 2 * block_idx
 
@@ -121,8 +119,10 @@ class StyleGANEncoderNet(nn.Module):
                 )
 
                 if num_style_vectors > 1:
-                    self.heads = Splitter(num_style_vectors, w_space_dim, out_channels, head_gain),
-                    
+                    self.heads = Splitter(
+                        num_style_vectors, w_space_dim, out_channels, head_gain
+                    )
+
             else:
                 self.add_module(
                     f"block{block_idx}",
@@ -137,21 +137,15 @@ class StyleGANEncoderNet(nn.Module):
             out_channels = min(out_channels * 2, self.encoder_channels_max)
 
         self.downsample = AveragePoolingLayer()
-        self.predict_residual_from_mean = predict_residual_from_mean
-
-        if self.predict_residual_from_mean:
-            self.init_mean = None
-        else:
-            self.init_mean = torch.randn(1, 512, 512).cuda()
 
     def _forward(self, x):
-        x = x * 2 - 1 
+        x = x * 2 - 1
 
         for block_idx in range(self.num_blocks):
             if 0 < block_idx < self.num_blocks - 1:
                 x = self.downsample(x)
             x = self.__getattr__(f"block{block_idx}")(x)
-            
+
         if self.num_style_vectors > 1:
             return self.heads(x)
             # return self.heads((x.reshape(-1, 1, 512).repeat(1, 512, 1) + self.embeddings).transpose(0, 1)).transpose(0, 1)
@@ -171,12 +165,8 @@ class StyleGANEncoderNet(nn.Module):
                 f"`height` and `width` equal to {self.resolution}!\n"
                 f"But {x.shape} is received!"
             )
-        
-        with torch.no_grad():
-            if self.init_mean is None and self.predict_residual_from_mean:
-                self.init_mean = self._forward(x).mean(dim=0, keepdim=True)
 
-        return self._forward(x) - (0.0 if self.init_mean is None else self.init_mean).to(x.device)
+        return self._forward(x)
 
 
 class Splitter(nn.Module):
@@ -186,9 +176,10 @@ class Splitter(nn.Module):
             torch.randn(
                 num_style_vectors,
                 w_space_dim,
-                out_channels, 
-            ) / head_gain
-        ) 
+                out_channels,
+            )
+            / head_gain
+        )
         self.head_gain = head_gain
 
         with torch.no_grad():
@@ -197,6 +188,7 @@ class Splitter(nn.Module):
 
     def forward(self, x):
         return (self.heads @ x.t()).transpose(2, 1).transpose(1, 0) * self.head_gain
+
 
 class AveragePoolingLayer(nn.Module):
     def __init__(self, scale_factor=2):
@@ -271,13 +263,15 @@ class FirstBlock(nn.Module):
     ):
         super().__init__()
 
-        self.conv = nn.Conv2d(
-            in_channels=in_channels,
-            out_channels=out_channels,
-            kernel_size=3,
-            stride=1,
-            padding=1,
-            bias=False,
+        self.conv = nn.Sequential(
+            nn.ReflectionPad2d(1),
+            nn.Conv2d(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                kernel_size=3,
+                stride=1,
+                bias=False,
+            ),
         )
         self.scale = wscale_gain / np.sqrt(in_channels * 3 * 3) if use_wscale else 1.0
         self.bn = nn.GroupNorm(1, out_channels) if use_bn else nn.Identity()
@@ -346,13 +340,15 @@ class ResBlock(nn.Module):
         hidden_channels = min(in_channels, out_channels)
 
         # First convolutional block.
-        self.conv1 = nn.Conv2d(
-            in_channels=in_channels,
-            out_channels=hidden_channels,
-            kernel_size=3,
-            stride=1,
-            padding=1,
-            bias=False,
+        self.conv1 = nn.Sequential(
+            nn.ReflectionPad2d(1),
+            nn.Conv2d(
+                in_channels=in_channels,
+                out_channels=hidden_channels,
+                kernel_size=3,
+                stride=1,
+                bias=False,
+            ),
         )
         self.scale1 = 1.0 if use_wscale else wscale_gain / np.sqrt(in_channels * 3 * 3)
         # NOTE: WScaleLayer is employed to add bias.
@@ -365,13 +361,15 @@ class ResBlock(nn.Module):
         self.bn1 = nn.GroupNorm(1, hidden_channels) if use_bn else nn.Identity()
 
         # Second convolutional block.
-        self.conv2 = nn.Conv2d(
-            in_channels=hidden_channels,
-            out_channels=out_channels,
-            kernel_size=3,
-            stride=1,
-            padding=1,
-            bias=False,
+        self.conv2 = nn.Sequential(
+            nn.Conv2d(
+                in_channels=hidden_channels,
+                out_channels=out_channels,
+                kernel_size=3,
+                stride=1,
+                bias=False,
+            ),
+            nn.ReflectionPad2d(1),
         )
         self.scale2 = (
             1.0 if use_wscale else wscale_gain / np.sqrt(hidden_channels * 3 * 3)

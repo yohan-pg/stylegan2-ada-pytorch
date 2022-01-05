@@ -2,7 +2,6 @@ from inversion import *
 
 from training.dataset import ImageFolderDataset
 import training.networks as networks
-import itertools 
 
 OUTDIR = "out/video"
 

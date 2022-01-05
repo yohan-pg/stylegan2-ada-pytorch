@@ -8,7 +8,6 @@ class EncodingDataset:
         self.dataset = dnnlib.util.construct_class_by_name(
             class_name="training.dataset.ImageFolderDataset",
             path=path,
-            use_labels=False,
         )
 
     def __len__(self):
@@ -30,7 +29,7 @@ class EncodingDataset:
             sampler=misc.InfiniteSampler(dataset=subset, shuffle=False) if infinite else None,
             batch_size=batch_size,
             pin_memory=True,
-            num_workers=0, #!!!
+            num_workers=3, 
             prefetch_factor=2
         ):
             yield (targets / 255.0).cuda()

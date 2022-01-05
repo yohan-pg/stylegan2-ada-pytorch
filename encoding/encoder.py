@@ -34,7 +34,6 @@ class Encoder(nn.Module):
             StyleGANEncoderNet.configure_for(
                 G,
                 w_plus="+" in variable_type.space_name,
-                predict_residual_from_mean=not issubclass(variable_type, ZVariable),
                 **kwargs,
             ).cuda(),
         )
@@ -43,7 +42,6 @@ class Encoder(nn.Module):
         if fine_tune_discriminator:
             D.train()
             D.requires_grad_(True)
-
         self.optimizer = torch.optim.Adam(
             list(self.parameters()) + list(D.parameters()),
             lr=lr,
@@ -65,7 +63,7 @@ class Encoder(nn.Module):
         self.distance_weight = distance_weight
 
     def backprop_discr(self, real: torch.Tensor, preds: torch.Tensor, var: Variable):
-        #! sync is unimplemented, does not work with DistributedDataParallel
+        #! sync is unimplemented; it class does not work with DistributedDataParallel
         self.sg2_loss.accumulate_gradients_encoder(
             "Dboth", real, var.detach(), sync=False, gain=self.discriminator_weight
         )
@@ -93,6 +91,7 @@ class Encoder(nn.Module):
                     yield preds, targets, loss
 
                     self.optimizer.zero_grad()
+                    
                     loss.mean(dim=0).backward(retain_graph=self.fine_tune_discriminator)
 
                     if self.fine_tune_discriminator:
@@ -107,7 +106,7 @@ class Encoder(nn.Module):
     ) -> torch.Tensor:
         assert len(preds) == len(targets)
         return make_grid(
-            torch.cat((preds, targets, *others, preds - targets)), nrow=len(targets)
+            torch.cat((targets, preds, *others, preds - targets)), nrow=len(targets)
         )
 
     def make_interpolation_grid(

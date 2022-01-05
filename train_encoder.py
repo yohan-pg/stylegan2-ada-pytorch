@@ -2,43 +2,41 @@ from inversion import *
 from encoding import *
 from datetime import datetime
 
+#!!! dataloder is messed up, I was trying to fix workers
+
 ## todo must haves
-# todo implement ours with W+
+# tood fix interpolation grid
+# todo fix discriminator losss -> I'm not sure it works anymore, I add requires_grad_ in DBoth
 # todo loader workers
+# todo implement ours with W+
 # todo make sure that code snapshotting works (does the save fn need to be different)
-# todo eval_all_metrics on encoder predictions directly
+# todo figure out how to run eval_all_metrics on encoder predictions directly
+# todo try to add a w_mean regularization, in order to make interpolation work again
 
 ## todo to test eventually
-# todo avoid the manual .cuda calls
-# todo reflection padding to avoid artifacts
 # todo try encoding fakes instead? can we get that perfect?
 # todo review bn and wscale -> How to not do group norm?
 # todo try training with a larger batch size. Is the quality better?
-# todo try a truncation penalty or something like that
-# todo try predicting S variable
 # todo try increasing the final style size. going from a single 512 vector to 512 other vectors of the same size is a bit crazy
 # todo try RAdam to avoid going crazy early in training?
+# todo try predicting S variable
+# todo hyperparam search for the ideal discr_weight
 
-## todo finally
-# todo compare quality levels on real trainings
-
-#!! linear out is enabled
-
-NAME = "w_linear_out_test"
+NAME = "test"
 METHOD = "adain"
 PKL_PATH = f"pretrained/tmp.pkl"
 
 GAIN = 1.0
 HEAD_GAIN = 1.0 if METHOD == "adaconv" else 1.0
 VARIABLE_TYPE = WVariable
-LEARNING_RATE = 1e-3
+LEARNING_RATE = 1e-4 #!!! was 1e-3
 BETA_1 = 0.0
 BETA_2 = 0.999
 
-BATCH_SIZE = 1 #!!!
-SUBSET_SIZE = None
+BATCH_SIZE = 2 #!!!
+SUBSET_SIZE = 2 #!!!
 DIST_WEIGHT = 1.0
-DISCR_WEIGHT = 0.1 #!!!
+DISCR_WEIGHT = 0.1
 
 OUTDIR = f"encoder-training-runs/{NAME}/" + str(datetime.now()).split(".")[0].replace(
     " ", "_"
@@ -83,42 +81,41 @@ if __name__ == "__main__":
     for i, (preds, targets, loss) in enumerate(
         tqdm.tqdm(encoder.fit(loader, criterion))
     ):
-        print(i)
+        def save_images(suffix):
+            save_image(
+                encoder.make_prediction_grid(preds, targets),
+                f"{OUTDIR}/encoding{suffix}.png",
+            )
+            # save_image(
+            #     encoder.make_interpolation_grid(targets),
+            #     f"{OUTDIR}/encoding_interpolation{suffix}.png",
+            # )
+            save_image(
+                encoder.make_prediction_grid(
+                    encoder(validation_targets).to_image(), validation_targets
+                ),
+                f"{OUTDIR}/encoding_validation{suffix}.png",
+            )
+            # save_image(
+            #     encoder.make_interpolation_grid(validation_targets),
+            #     f"{OUTDIR}/encoding_interpolation_validation{suffix}.png",
+            # )
 
-        # def save_images(suffix):
-        #     save_image(
-        #         encoder.make_prediction_grid(preds, targets),
-        #         f"{OUTDIR}/encoding{suffix}.png",
-        #     )
-        # save_image(
-        #     encoder.make_interpolation_grid(targets),
-        #     f"{OUTDIR}/encoding_interpolation{suffix}.png",
-        # )
-        # save_image(
-        #     encoder.make_prediction_grid(
-        #         encoder(validation_targets).to_image(), validation_targets
-        #     ),
-        #     f"{OUTDIR}/encoding_validation{suffix}.png",
-        # )
-        # save_image(
-        #     encoder.make_interpolation_grid(validation_targets),
-        #     f"{OUTDIR}/encoding_interpolation_validation{suffix}.png",
-        # )
+        with torch.no_grad():
+            writer.add_scalar("Loss/train", loss.mean().item(), i)
 
-        # with torch.no_grad():
-        #     writer.add_scalar("Loss/train", loss.mean().item(), i)
+            if i % 100 == 0:
+                writer.add_scalar(
+                    "Loss/validation",
+                    encoder.evaluate(targets, criterion)[-1].mean().item(),
+                    i,
+                )
+                save_images("")
 
-        #     if i % 100 == 0:
-        #         writer.add_scalar(
-        #             "Loss/validation",
-        #             encoder.evaluate(targets, criterion)[-1].mean().item(),
-        #             i,
-        #         )
-
-        #     if i % 50_000 == 0:
-        #         tag = f"{i//1_000:06d}"
-        #         save_images(tag)
-        #         save_pickle(
-        #             dict(E=encoder, G_ema=G, D=D),
-        #             os.path.join(OUTDIR, f"encoder-snapshot-{tag}.pkl"),
-        #         )
+            if i % 50_000 == 0:
+                tag = f"{i//1_000:06d}"
+                save_images(tag)
+                save_pickle(
+                    dict(E=encoder, G_ema=G, D=D),
+                    os.path.join(OUTDIR, f"encoder-snapshot-{tag}.pkl"),
+                )

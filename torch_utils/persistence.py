@@ -31,9 +31,11 @@ _module_to_src_dict = dict()  # {module: src, ...}
 _src_to_module_dict = dict()  # {src: module, ...}
 
 # ----------------------------------------------------------------------------
+from typing import TypeVar
 
+T = TypeVar("T")
 
-def persistent_class(orig_class):
+def persistent_class(orig_class: T) -> T:
     r"""Class decorator that extends a given class to save its source code
     when pickled.
 

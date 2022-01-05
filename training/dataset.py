@@ -194,12 +194,13 @@ class ImageFolderDataset(Dataset):
         ):
             raise IOError("Image files do not match the specified resolution")
         super().__init__(name=name, raw_shape=raw_shape, **super_kwargs)
+        self.close() # *** hack so the zipfile gets re-created for each worker (there is a concurrency bug otherwise)
 
     @staticmethod
     def _file_ext(fname):
         return os.path.splitext(fname)[1].lower()
 
-    def _get_zipfile(self):
+    def _get_zipfile(self, init=False):
         assert self._type == "zip"
         if self._zipfile is None:
             self._zipfile = zipfile.ZipFile(self._path)
@@ -228,7 +229,8 @@ class ImageFolderDataset(Dataset):
             if pyspng is not None and self._file_ext(fname) == ".png":
                 image = pyspng.load(f.read())
             else:
-                image = np.array(PIL.Image.open(f))
+                pil_image = PIL.Image.open(f)
+                image = np.array(pil_image)
         if image.ndim == 2:
             image = image[:, :, np.newaxis]  # HW => HWC
         image = image.transpose(2, 0, 1)  # HWC => CHW
