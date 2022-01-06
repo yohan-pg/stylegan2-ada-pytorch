@@ -1,7 +1,8 @@
 from .eval_image_editing_consistency import *
 from .eval_interpolation_determinism import *
 from .eval_reconstruction_quality import *
-from .eval_interpolation_quality import *
+from .eval_reconstruction_realism import *
+from .eval_interpolation_realism import *
 
 import sys
 
@@ -12,7 +13,6 @@ def run_eval(
     methods: Dict[str, networks.Generator],
     evaluations: List[Evaluation],
     num_steps: int,
-    inverter_type: Type[Inverter],
     label: str = "",
     peform_dry_run: bool = True,
     **kwargs,
@@ -40,7 +40,7 @@ def run_eval(
 
                 dataloaders[experiment_name] = InvertedDataloader(
                     target_dataloader,
-                    inverter_type(
+                    Inverter(
                         G,
                         num_steps=num_steps if not is_dry_run else 1,
                         variable=variable_type,
@@ -50,7 +50,7 @@ def run_eval(
                 )
 
             for evaluation in evaluations:
-                print(evaluation.name, flush=True)
+                print("\n🧮", evaluation.name, flush=True)
                 evaluation(timestamp)(dataloaders)
 
     return timestamp
@@ -83,6 +83,7 @@ def create_artifacts(
 def join_evaluation_tables(timestamp: str) -> None:
     os.chdir(f"evaluation-runs/{timestamp}")
     
+    print("-------------------")
     print()
     
     with open(f"full_table.txt", "w") as out_file:
@@ -92,5 +93,7 @@ def join_evaluation_tables(timestamp: str) -> None:
                     data = in_file.read()
                     print(data)
                     print(data, file=out_file)
-
+    
+    print("-------------------")
+    
     os.chdir("../..")

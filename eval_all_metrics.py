@@ -2,23 +2,28 @@ from inversion import *
 from inversion.eval import *
 
 
+RESUME_FROM_TIMESTAMP = None
+
+
 if __name__ == "__main__":
     evaluations = [
+        EvalReconstructionRealism,
         EvalReconstructionQuality,
-        EvalInterpolationQuality,
+        EvalInterpolationRealism,
     ]
 
     target_dataloader = RealDataloader(
-        "datasets/afhq2_cat256.zip", 
-        #!"datasets/afhq2_cat256_test.zip"
+        "datasets/afhq2_cat256_test.zip",
         batch_size=4,
         num_images=8,
         fid_data_path="datasets/afhq2_cat256",
+        seed=0
     )
 
-    if True:
+    if RESUME_FROM_TIMESTAMP is not None:
+        create_artifacts(RESUME_FROM_TIMESTAMP, target_dataloader, evaluations)
+    else:
         timestamp = run_eval(
-            inverter_type=Inverter,
             label="",
             evaluations=evaluations,
             peform_dry_run=False,
@@ -36,21 +41,16 @@ if __name__ == "__main__":
             create_optimizer=lambda params: torch.optim.Adam(params, lr=0.02),
         )
         create_artifacts(timestamp, target_dataloader, evaluations)
-    else:
-        create_artifacts("2021-11-25_20:01:36", target_dataloader, evaluations)
 
 
 #! dry run in broken
-# todo Warning: batch size is bigger than the data size. Setting batch size to data size
-# todo why is there 100 steps of interpolation quality
+# todo add reconstruction quality tqdm total
+# todo fix interpolation realism tqdm
 # todo understand how to cache eval methods -> we want to pull creating the FID metric outside of the first pass
-# todo fix progress for interpolation determinism
-# todo rename interpolation quality to interpolation realism
-# todo add reconstruction realism
-# todo consider splitting interpolation quality into folders
+# todo consider splitting interpolation quality into subfolders to avoid lagging the FS
 # todo refactor so that `run_eval` takes method-variable pairs [list out exactly which combination of parameter I want to use]
-# todo add a flag for sequential optimization
-# todo double check that it is deterministic for a given seed, & stable for another (low variance)
+# todo does not appear to be deterministic for a given seed
+# todo verify that it is stable for 2 seeds (low variance)
 # todo delete all artifacts when creating new ones. maybe split measurements from artiact production in output folders?
 # todo what to do with second rereun for interpolation determinism?
 # todo understand how to nest tqdm better
