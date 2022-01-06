@@ -41,7 +41,7 @@ if __name__ == "__main__":
     }.items():
         for variable_type in [ZVariableConstrainToTypicalSetAllVecs, ZVariable]:
             torch.manual_seed(0)
-            dataloader = RealDataloader("datasets/afhq2_cat128_test.zip", batch_size=4, num_images=8)
+            dataloader = RealDataloader("datasets/afhq2_cat128_test.zip", batch_size=4, max_images=8)
             losses = sample_random_inverted_interpolations(
                 f"{OUTDIR}/{method_name.lower()}_{variable_type.__name__.lower()}",
                 dataloader,

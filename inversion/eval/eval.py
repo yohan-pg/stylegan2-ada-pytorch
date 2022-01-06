@@ -93,7 +93,7 @@ class Evaluation:
         target_dataloader: RealDataloader,
         results: Results,
     ) -> None:
-        description = f"over {target_dataloader.num_images} images"
+        description = f"over {target_dataloader.max_images} images"
 
         for group_name in set([key.split("/")[1] for key in results.keys()]):
             plt.figure()

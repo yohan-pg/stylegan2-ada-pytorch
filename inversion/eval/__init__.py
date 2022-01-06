@@ -9,22 +9,25 @@ import sys
 
 def run_eval(
     target_dataloader: RealDataloader,
-    variable_types: List[Type[Variable]],
-    methods: Dict[str, networks.Generator],
+    experiments: Dict[str, Tuple[networks.Generator, Type[Variable]]],
     evaluations: List[Evaluation],
     num_steps: int,
     label: str = "",
-    peform_dry_run: bool = True,
+    perform_dry_run: bool = True,
     **kwargs,
 ) -> None:
-    if not peform_dry_run:
-        runs = [False]
-    elif num_steps <= 1:
-        runs = [True]
-    else:
-        runs = [True, False]
+    assert len(evaluations) > 0 
+    
+    for is_dry_run in [True, False] if perform_dry_run else [False]:
+        if is_dry_run:
+            print("-------------------")
+            print("\n👉 Performing dry run...")
+            print()
+        else:
+            print("\n-------------------")
+            print("\n👉 Performing full run...")
+            print()
 
-    for is_dry_run in runs:
         timestamp = create_eval_directory(label, is_dry_run)
         target_dataloader = (
             target_dataloader
@@ -32,26 +35,24 @@ def run_eval(
             else target_dataloader.subset(2 * target_dataloader.batch_size)
         )
 
-        for variable_type in variable_types:
-            dataloaders = {}
-            for method_name, G in methods.items():
-                experiment_name = method_name + "/" + variable_type.space_name
-                print(experiment_name, flush=True)
+        dataloaders = {}
+        for experiment_name, (G_or_E, variable_type) in experiments.items():
+            print(experiment_name, flush=True)
 
-                dataloaders[experiment_name] = InvertedDataloader(
-                    target_dataloader,
-                    Inverter(
-                        G,
-                        num_steps=num_steps if not is_dry_run else 1,
-                        variable=variable_type,
-                        seed=target_dataloader.seed,
-                        **kwargs,
-                    ),
-                )
+            dataloaders[experiment_name] = InvertedDataloader(
+                target_dataloader,
+                Inverter(
+                    G_or_E,
+                    num_steps=num_steps if not is_dry_run else 1,
+                    variable=variable_type,
+                    seed=target_dataloader.seed,
+                    **kwargs,
+                ),
+            )
 
-            for evaluation in evaluations:
-                print("\n🧮", evaluation.name, flush=True)
-                evaluation(timestamp)(dataloaders)
+        for evaluation in evaluations:
+            print("\n🧮", evaluation.name, flush=True)
+            evaluation(timestamp)(dataloaders)
 
     return timestamp
 
@@ -83,8 +84,8 @@ def create_artifacts(
 def join_evaluation_tables(timestamp: str) -> None:
     os.chdir(f"evaluation-runs/{timestamp}")
     
-    print("-------------------")
-    print()
+    print("\n-------------------")
+    print("\n👌\n")
     
     with open(f"full_table.txt", "w") as out_file:
         for path in os.listdir(f"."):

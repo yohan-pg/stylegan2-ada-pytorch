@@ -157,23 +157,25 @@ class RealDataloader(InversionDataloader):
 
     dataset_path: str
     batch_size: int
-    num_images: int
+    max_images: Optional[int]
     seed: int = 0
     fid_data_path: str = None
 
     def __post_init__(self):
         torch.manual_seed(self.seed)
-        dataset = ImageFolderDataset(self.dataset_path)
-        self.dataset = torch.utils.data.Subset(
-            dataset, torch.randperm(len(dataset))[: self.num_images]
-        )
+        self.dataset = ImageFolderDataset(self.dataset_path)
+
+        if self.max_images is not None:
+            self.dataset = torch.utils.data.Subset(
+                self.dataset, torch.randperm(len(self.dataset))[: self.max_images]
+            )
 
     def __len__(self):
-        return self.num_images // self.batch_size
+        return len(self.dataset) // self.batch_size
 
-    def subset(self, num_images: int) -> "RealDataloader":
+    def subset(self, max_images: int) -> "RealDataloader":
         return RealDataloader(
-            self.dataset_path, self.batch_size, self.num_images, self.seed
+            self.dataset_path, self.batch_size, max_images, self.seed
         )
 
     def __iter__(self):
@@ -218,13 +220,13 @@ class InvertedDataloader:
         self.inverter = inverter
         self.target_dataloader = target_dataloader
         self.batch_size = self.target_dataloader.batch_size
+        self.max_images = self.target_dataloader.max_images
         
         print("Inverting Dataset...")
         for target in tqdm.tqdm(target_dataloader):
             inversion = inverter(target).purge()
             self.inversions.append(inversion)
 
-        self.num_images = self.target_dataloader.num_images
 
     def __len__(self):
         return len(self.target_dataloader)

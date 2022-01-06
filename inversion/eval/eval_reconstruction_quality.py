@@ -10,7 +10,7 @@ class EvalReconstructionQuality(Evaluation):
     def eval(self, experiment_name: str, dataloader: InvertedDataloader) -> Result:
         losses = []
 
-        for i, inversion in tqdm.tqdm(enumerate(dataloader)):
+        for i, inversion in tqdm.tqdm(enumerate(dataloader), total=len(dataloader)):
             losses.append(torch.stack(inversion.losses, dim=1))
             save_image(
                 torch.cat(

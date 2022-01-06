@@ -58,13 +58,15 @@ class EvalInterpolationRealism(Evaluation):
                 if i <= j:
                     for k in range(
                         1 if i == j else 0, dataloader.target_dataloader.batch_size
-                    ):  # * Doesn't interpolate images with themselves
+                    ):  # * Skips interpolating images with themselves
                         yield (i, j, k), (inversion, other_inversion)
 
     def num_image_pairs(self, dataloader: InvertedDataloader):
-        n = len(dataloader) * dataloader.target_dataloader.batch_size
-        return n * (n - 1) // 2
+        n = len(dataloader) * dataloader.batch_size
+        return n * (n + 1) // 2
+        # 3 batches, 1 with 4 images and 2 with 3  = 10 total images
 
     def create_artifacts(self, dataloaders: Dict[str, InvertedDataloader]):
         results = self.load_results_from_disk()
         self.make_table(results)
+

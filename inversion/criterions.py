@@ -1,8 +1,5 @@
 from .prelude import *
 
-import torchvision.transforms as TF
-import functools
-
 
 class InversionCriterion(nn.Module):
     def __rmul__(self, weight):
