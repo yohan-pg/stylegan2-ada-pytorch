@@ -17,11 +17,9 @@ def run_eval(
     peform_dry_run: bool = True,
     **kwargs,
 ) -> None:
-    assert num_steps >= 1
-
     if not peform_dry_run:
         runs = [False]
-    elif num_steps == 1:
+    elif num_steps <= 1:
         runs = [True]
     else:
         runs = [True, False]
@@ -59,7 +57,7 @@ def run_eval(
 
 
 def create_eval_directory(label: str, dry_run: bool) -> str:
-    os.makedirs("eval", exist_ok=True)
+    os.makedirs("evaluation-runs", exist_ok=True)
 
     if dry_run:
         timestamp = "_dry_run"
@@ -68,8 +66,8 @@ def create_eval_directory(label: str, dry_run: bool) -> str:
 
     timestamp += "" if label == "" else label + "_"
 
-    fresh_dir(f"eval/{timestamp}")
-    shutil.copyfile(sys.argv[0], f"eval/{timestamp}/config.txt")
+    fresh_dir(f"evaluation-runs/{timestamp}")
+    shutil.copyfile(sys.argv[0], f"evaluation-runs/{timestamp}/config.txt")
 
     return timestamp
 
@@ -83,7 +81,7 @@ def create_artifacts(
 
 
 def join_evaluation_tables(timestamp: str) -> None:
-    os.chdir(f"eval/{timestamp}")
+    os.chdir(f"evaluation-runs/{timestamp}")
 
     with open(f"full_table.txt", "w") as out_file:
         for path in os.listdir(f"."):

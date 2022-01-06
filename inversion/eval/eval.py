@@ -14,7 +14,7 @@ class Evaluation:
 
     @property
     def out_dir(self):
-        return f"eval/{self.timestamp}/{self.name.lower().replace(' ', '_')}"
+        return f"evaluation-runs/{self.timestamp}/{self.name.lower().replace(' ', '_')}"
 
     def __init__(self, timestamp: datetime):
         self.timestamp = timestamp

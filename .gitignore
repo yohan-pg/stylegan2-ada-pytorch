@@ -6,6 +6,7 @@ __pycache__/
 /datasets/
 /training-runs/
 /encoder-training-runs/
+/evaluation-runs/
 /stylegan2/
 /out/
 /pretrained/

@@ -4,12 +4,12 @@ from inversion.eval import *
 if __name__ == "__main__":
     evaluations = [
         EvalReconstructionQuality,
-        # EvalInterpolationQuality,
-        # EvalImageEditingConsistency,
+        EvalInterpolationQuality,
     ]
 
     target_dataloader = RealDataloader(
-        "datasets/afhq2_cat256_test.zip",
+        "datasets/afhq2_cat256.zip", 
+        #!"datasets/afhq2_cat256_test.zip"
         batch_size=4,
         num_images=8,
         fid_data_path="datasets/afhq2_cat256",
@@ -23,15 +23,12 @@ if __name__ == "__main__":
             peform_dry_run=False,
             target_dataloader=target_dataloader,
             variable_types=[
-                add_soft_encoder_constraint(WPlusVariable, 0.0, 0.002),
+                add_hard_encoder_constraint(WPlusVariable, 0.0, 0.0)
             ],
-            num_steps=1000,
+            num_steps=0,
             methods={
                 "AdaConv": open_encoder(
                     "encoder-training-runs/encoder_0.1/encoder-snapshot-000100.pkl"
-                ),
-                "AdaIn": open_encoder(
-                    "encoder-training-runs/encoder_0.1_baseline/encoder-snapshot-000100.pkl"
                 ),
             },
             criterion=VGGCriterion(),
@@ -43,10 +40,11 @@ if __name__ == "__main__":
 
 
 #! dry run in broken
-#!!!!!!! interpolation quality is not deterministic?
-# todo make it work with encoders
+# todo why is there 100 steps of interpolation quality
 # todo understand how to cache eval methods
 # todo fix progress for interpolation determinism
+# todo rename interpolation quality to interpolation realism
+# todo add reconstruction realism
 # todo consider splitting interpolation quality into folders
 # todo refactor so that `run_eval` takes method-variable pairs [list out exactly which combination of parameter I want to use]
 # todo add a flag for sequential optimization
@@ -54,6 +52,7 @@ if __name__ == "__main__":
 # todo delete all artifacts when creating new ones. maybe split measurements from artiact production in output folders?
 # todo what to do with second rereun for interpolation determinism?
 # todo understand how to nest tqdm better
+# todo verify that everything is deterministic
 # todo avoid such extreme # of pairs in interpolation determinism. subset the second loader?
 # todo should we really pass in target_dataloader into create_artifacts? in reality, the dataloader info we need should be saved into the pickle files
 # todo multigpu?

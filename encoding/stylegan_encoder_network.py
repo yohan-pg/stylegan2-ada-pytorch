@@ -49,7 +49,6 @@ class StyleGANEncoderNet(nn.Module):
         encoder_channels_base=64,
         encoder_channels_max=1024,
         use_wscale=True,
-        head_gain: float = 1.0,
         w_plus=True,
         use_bn=True,
         single_layer_adaconv=False,
@@ -86,7 +85,6 @@ class StyleGANEncoderNet(nn.Module):
         self.encoder_channels_max = encoder_channels_max
         self.use_wscale = use_wscale
         self.use_bn = use_bn
-        self.head_gain = head_gain
         self.num_style_vectors = num_style_vectors
         # Blocks used in encoder.
         self.num_blocks = int(np.log2(resolution))

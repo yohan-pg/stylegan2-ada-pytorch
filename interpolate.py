@@ -1,6 +1,8 @@
 from inversion import *
 from training.networks import *
 
+# todo fix regularization plot
+
 if False:
     METHOD = "adain"
     # PATH = "pretrained/no_torgb_adain_tmp.pkl"
@@ -8,11 +10,10 @@ if False:
 else:
     METHOD = "adaconv"
     # PATH = "pretrained/ffhq.pkl"
-    PATH = "encoder-training-runs/encoder_0.0/2022-01-04_23:24:05/encoder-snapshot-000050.pkl"
+    PATH = "encoder-training-runs/encoder_0.1/encoder-snapshot-000100.pkl"
 
-
-VARIABLE_TYPE = add_soft_encoder_constraint(WPlusVariable, 0.0, 10.0, encoder_init=True)
-NUM_STEPS = 50
+VARIABLE_TYPE = add_hard_encoder_constraint(WVariable, 0.0, 0.0, encoder_init=True)
+NUM_STEPS = 0
 CRITERION_TYPE = VGGCriterion
 SNAPSHOT_FREQ = 50
 
@@ -47,6 +48,7 @@ if __name__ == "__main__":
             snapshot_frequency=SNAPSHOT_FREQ,
             seed=SEED if SAME_SEED else None,
         )
+
         try:
             for inversion, snapshot_iter in tqdm.tqdm(
                 inverter.all_inversion_steps(target)
@@ -70,7 +72,6 @@ if __name__ == "__main__":
         save_image(w_mean.to_image(), f"{OUT_DIR}/mean_w.png")
     except:
         print("Failed to save mean images")
-        pass
 
     A = invert_target(target_A, "A", VARIABLE_TYPE)
     B = invert_target(

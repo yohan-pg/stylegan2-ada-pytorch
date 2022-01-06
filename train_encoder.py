@@ -3,35 +3,32 @@ from encoding import *
 from datetime import datetime
 
 ## todo must haves
+# todo try to add a w_mean regularization, in order to make interpolation work again? 
+# todo measure optimization quality vs the baseline
 # todo why does the single layer fail again?
 # todo vectorize w+
-# todo double check if interpolation is good now
-# todo if it isnt, try to add a w_mean regularization, in order to make interpolation work again? 
 
 ## todo to test eventually
 # todo find a better solution for w+? why is it so bad?
 # todo try training with a larger batch size. Is the quality better?
 # todo try increasing the final style size. going from a single 512 vector to 512 other vectors of the same size is a bit crazy
-# todo try encoding fakes instead? can we get that perfect?
-# todo try RAdam to avoid going crazy early in training?
-# todo try predicting S variable?
-# todo hyperparam search for the ideal discr_weight
 # todo try a better architecture (residual?)
+# todo try encoding fakes instead? can we get that perfect?
+# todo review ID invert training parameters
+# todo hyperparam search for the ideal discr_weight
 
 NAME = "encoder_0.0"
 METHOD, PKL_PATH = "adaconv", f"pretrained/no_torgb_adaconv_tmp.pkl"
 
-GAIN = 1.0
-HEAD_GAIN = 1.0 if METHOD == "adaconv" else 1.0
+GAIN = 1.0 
 VARIABLE_TYPE = WVariable
-LEARNING_RATE = 1e-3 
-BETA_1 = 0.0
-BETA_2 = 0.999
+LEARNING_RATE = 1e-3
 
 BATCH_SIZE = 4
 SUBSET_SIZE = None 
 DIST_WEIGHT = 1.0
-DISCR_WEIGHT = 0.0 
+DISCR_WEIGHT = 0.1
+MEAN_REG = 1.0 
 
 OUTDIR = f"encoder-training-runs/{NAME}/" + str(datetime.now()).split(".")[0].replace(
     " ", "_"
@@ -49,12 +46,10 @@ if __name__ == "__main__":
         D,
         VARIABLE_TYPE,
         gain=GAIN,
-        head_gain=HEAD_GAIN,
         lr=LEARNING_RATE,
-        beta_1=BETA_1,
-        beta_2=BETA_2,
         discriminator_weight=DISCR_WEIGHT,
         distance_weight=DIST_WEIGHT,
+        mean_regularization_weight=MEAN_REG,
         single_layer_adaconv=False
     )
 

@@ -16,14 +16,15 @@ class Encoder(nn.Module):
         G,
         D,
         variable_type: Type[Variable],
-        gain: float = 1.0,
+        gain: float = 1.0, 
         lr: float = 0.001,
         beta_1: float = 0.0,
-        beta_2: float = 0.0,
+        beta_2: float = 0.999,
         const_noise: bool = True,
         fine_tune_discriminator: bool = False,
         discriminator_weight: float = 0.1,
         distance_weight: float = 1.0,
+        mean_regularization_weight: float = 0.0,
         **kwargs,
     ):
         super().__init__()
@@ -40,6 +41,7 @@ class Encoder(nn.Module):
             ).cuda(),
         )
         self.mean = G.mapping.w_avg.reshape(1, 1, G.w_dim)
+        self.mean_regularization_weight = mean_regularization_weight
 
         if fine_tune_discriminator:
             D.train()
@@ -73,15 +75,19 @@ class Encoder(nn.Module):
             "Gboth", real, var, sync=False, gain=self.discriminator_weight
         )
 
+    def _forward(self, x: torch.Tensor) -> Variable:
+        deltas = self.network(x) * self.gain
+        var = self.variable_type(self.G[0], deltas + self.mean)
+        return deltas, var
+    
     def forward(self, x: torch.Tensor) -> Variable:
-        data = self.network(x) * self.gain + self.mean
-        var = self.variable_type(self.G[0], data)
+        _, var = self._forward(x)
         return var
 
     def evaluate(self, targets, criterion):
-        var = self(targets)
+        deltas, var = self._forward(targets)
         preds = var.to_image(self.const_noise)
-        return var, preds, self.distance_weight * criterion(preds, targets)
+        return var, preds, self.distance_weight * criterion(preds, targets) + self.mean_regularization_weight * deltas.pow(2.0).mean()
 
     def fit(self, loader: List[torch.Tensor], criterion: InversionCriterion):
         try:

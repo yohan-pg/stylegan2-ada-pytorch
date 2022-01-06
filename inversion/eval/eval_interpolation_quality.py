@@ -29,10 +29,11 @@ class EvalInterpolationQuality(Evaluation):
                         save_image(
                             torch.cat(
                                 [
+                                    inversion.target.roll(k, dims=[0]),
                                     inversion.final_pred.roll(k, dims=[0]),
                                     midpoint,
                                     other_inversion.final_pred,
-                                    inversion.target,
+                                    other_inversion.target,
                                 ]
                             ),
                             f"{self.out_dir}/{experiment_name}/{i}_{j}_{k}.png",
@@ -50,7 +51,7 @@ class EvalInterpolationQuality(Evaluation):
         num_avail_cpus = len(os.sched_getaffinity(0))
         num_workers = min(num_avail_cpus, 8)
         # breakpoint()
-        # FID_infinity = calculate_FID_infinity_path('datasets/afhq2_cat256_stats.npz', "eval/2021-11-25_21:22:21/interpolation_quality/AdaConv/W+/fakes", 32, min_fake=250)
+        # FID_infinity = calculate_FID_infinity_path('datasets/afhq2_cat256_stats.npz', "evaevaluation-runsl/2021-11-25_21:22:21/interpolation_quality/AdaConv/W+/fakes", 32, min_fake=250)
 
         return {
             "FID": torch.tensor(
