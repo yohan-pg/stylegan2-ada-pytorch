@@ -82,7 +82,9 @@ def create_artifacts(
 
 def join_evaluation_tables(timestamp: str) -> None:
     os.chdir(f"evaluation-runs/{timestamp}")
-
+    
+    print()
+    
     with open(f"full_table.txt", "w") as out_file:
         for path in os.listdir(f"."):
             if os.path.isdir(f"{path}"):

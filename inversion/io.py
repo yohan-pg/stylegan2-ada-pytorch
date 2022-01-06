@@ -217,7 +217,8 @@ class InvertedDataloader:
         self.inversions = []
         self.inverter = inverter
         self.target_dataloader = target_dataloader
-
+        
+        print("Inverting Dataset...")
         for target in tqdm.tqdm(target_dataloader):
             inversion = inverter(target).purge()
             self.inversions.append(inversion)

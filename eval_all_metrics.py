@@ -1,6 +1,7 @@
 from inversion import *
 from inversion.eval import *
 
+
 if __name__ == "__main__":
     evaluations = [
         EvalReconstructionQuality,
@@ -40,8 +41,9 @@ if __name__ == "__main__":
 
 
 #! dry run in broken
+# todo Warning: batch size is bigger than the data size. Setting batch size to data size
 # todo why is there 100 steps of interpolation quality
-# todo understand how to cache eval methods
+# todo understand how to cache eval methods -> we want to pull creating the FID metric outside of the first pass
 # todo fix progress for interpolation determinism
 # todo rename interpolation quality to interpolation realism
 # todo add reconstruction realism
@@ -52,7 +54,5 @@ if __name__ == "__main__":
 # todo delete all artifacts when creating new ones. maybe split measurements from artiact production in output folders?
 # todo what to do with second rereun for interpolation determinism?
 # todo understand how to nest tqdm better
-# todo verify that everything is deterministic
-# todo avoid such extreme # of pairs in interpolation determinism. subset the second loader?
+# todo avoid such extreme no. of pairs in interpolation determinism. subset the second loader?
 # todo should we really pass in target_dataloader into create_artifacts? in reality, the dataloader info we need should be saved into the pickle files
-# todo multigpu?
