@@ -6,6 +6,7 @@ import sys
 import torch.optim as optim
 import tqdm
 import click
+import dataclasses
 import imageio
 import numpy as np
 import PIL.Image

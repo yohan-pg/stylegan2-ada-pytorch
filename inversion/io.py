@@ -153,13 +153,13 @@ class InversionDataloader:
 
 @dataclass(eq=False)
 class RealDataloader(InversionDataloader):
-    name = "real"
-
     dataset_path: str
     batch_size: int
     max_images: Optional[int]
     seed: int = 0
     fid_data_path: str = None
+    
+    name: ClassVar[str] = "real"
 
     def __post_init__(self):
         torch.manual_seed(self.seed)
@@ -177,6 +177,15 @@ class RealDataloader(InversionDataloader):
         return RealDataloader(
             self.dataset_path, self.batch_size, max_images, self.seed
         )
+
+    def serialize(self, path: str):
+        with open(f"{path}/dataloader.txt", "w") as f:
+            f.write(str(dataclasses.asdict(self)))
+
+    @staticmethod
+    def deserialize(path: str):
+        with open(f"{path}/dataloader.txt", "r") as f:
+            return RealDataloader(**eval(f.read()))
 
     def __iter__(self):
         inner_loader = torch.utils.data.DataLoader(
