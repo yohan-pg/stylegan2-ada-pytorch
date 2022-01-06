@@ -27,7 +27,7 @@ if __name__ == "__main__":
             "encoder-training-runs/encoder_0.1/encoder-snapshot-000100.pkl"
         )
         timestamp = run_eval(
-            label="",
+            label="hi",
             evaluations=evaluations,
             perform_dry_run=True,
             target_dataloader=target_dataloader,
@@ -52,8 +52,6 @@ if __name__ == "__main__":
         create_artifacts(timestamp, target_dataloader, evaluations)
 
 
-## code quality
-# todo change prefix to creating a subfolder
 
 ## interpolation realism
 # todo fix interpolation realism tqdm

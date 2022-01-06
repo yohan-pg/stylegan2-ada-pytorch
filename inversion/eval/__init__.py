@@ -12,7 +12,7 @@ def run_eval(
     experiments: Dict[str, Tuple[networks.Generator, Type[Variable]]],
     evaluations: List[Evaluation],
     num_steps: int,
-    label: str = "",
+    label: Optional[str] = None,
     perform_dry_run: bool = True,
     **kwargs,
 ) -> None:
@@ -57,15 +57,15 @@ def run_eval(
     return timestamp
 
 
-def create_eval_directory(label: str, dry_run: bool) -> str:
+def create_eval_directory(label: Optional[str], dry_run: bool) -> str:
     os.makedirs("evaluation-runs", exist_ok=True)
 
     if dry_run:
         timestamp = "_dry_run"
     else:
         timestamp = str(datetime.now()).split(".")[0].replace(" ", "_")
+        timestamp = label + "/" + timestamp if label is not None else label
 
-    timestamp += "" if label == "" else label + "_"
 
     fresh_dir(f"evaluation-runs/{timestamp}")
     shutil.copyfile(sys.argv[0], f"evaluation-runs/{timestamp}/config.txt")
