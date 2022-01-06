@@ -34,7 +34,7 @@ def run_eval(
             if not is_dry_run
             else target_dataloader.subset(2 * target_dataloader.batch_size)
         )
-
+        
         target_dataloader.serialize(f"evaluation-runs/{timestamp}")
 
         dataloaders = {}
@@ -56,6 +56,8 @@ def run_eval(
                 print("\n🧮", evaluation.name, flush=True)
                 evaluation(timestamp)(dataloaders)
 
+    create_artifacts(timestamp, evaluations)
+    
     return timestamp
 
 

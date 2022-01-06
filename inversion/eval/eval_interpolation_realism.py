@@ -6,16 +6,9 @@ from .fid import compute_fid
 
 
 class EvalInterpolationRealism(Evaluation):
-    name: ClassVar[str] = "Interpolation Realism"
-
     table_stat: str = "FID"
 
-    @torch.no_grad()
-    def eval(self, experiment_name: str, dataloader: InvertedDataloader) -> Result:
-        fakes_path = self.generate_interpolation_images(experiment_name, dataloader)
-        return {"FID": compute_fid(dataloader, fakes_path)}
-
-    def generate_interpolation_images(
+    def produce_images(
         self, experiment_name: str, dataloader: InvertedDataloader
     ):
         print("Generating interpolation images...")
@@ -51,6 +44,9 @@ class EvalInterpolationRealism(Evaluation):
                 )
 
         return fakes_path
+
+    def compute_metrics(self, dataloader: InvertedDataloader, images_path: str) -> dict:
+        return {"FID": compute_fid(dataloader, images_path)}
 
     def all_image_pairs(self, dataloader: InvertedDataloader):
         for i, inversion in enumerate(dataloader):

@@ -1,58 +1,50 @@
-from inversion import *
 from inversion.eval import *
 
+evaluations = [
+    EvalReconstructionQuality,
+    EvalReconstructionRealism,
+    EvalInterpolationRealism,
+]
 
-REGENERATE_FROM_PATH = "evaluation_runs/2022-01-06_16:48:08"
+run_eval(
+    label=None,
+    evaluations=evaluations,
+    perform_dry_run=True,
+    target_dataloader=RealDataloader(
+        "datasets/afhq2_cat256_test.zip",
+        batch_size=4,
+        max_images=8,
+        fid_data_path="datasets/afhq2_cat256",
+        seed=0,
+    ),
+    num_steps=0,
+    experiments={
+        "AdaConv/W+": (
+            open_encoder(
+                "encoder-training-runs/encoder_0.1/encoder-snapshot-000100.pkl"
+            ),
+            add_hard_encoder_constraint(WPlusVariable, 0.0, 0.0),
+        ),
+        # "AdaIN/W": (
+        #     open_encoder(
+        #         "encoder-training-runs/encoder_0.1/encoder-snapshot-000100.pkl"
+        #     ),
+        #     add_hard_encoder_constraint(WVariable, 0.0, 0.0),
+        # ),
+    },
+    criterion=VGGCriterion(),
+    create_optimizer=lambda params: torch.optim.Adam(params, lr=0.02),
+)
 
-if __name__ == "__main__":
-    evaluations = [
-        EvalReconstructionQuality,
-        # EvalReconstructionRealism,
-        # EvalInterpolationRealism,
-    ]
-
-    if REGENERATE_FROM_PATH is not None:
-        regenerate_artifacts(REGENERATE_FROM_PATH, evaluations)
-    else:
-        target_dataloader = RealDataloader(
-            "datasets/afhq2_cat256_test.zip",
-            batch_size=4,
-            max_images=8,
-            fid_data_path="datasets/afhq2_cat256",
-            seed=0,
-        )
-
-        E1 = open_encoder(
-            "encoder-training-runs/encoder_0.1/encoder-snapshot-000100.pkl"
-        )
-
-        timestamp = run_eval(
-            label=None,
-            evaluations=evaluations,
-            perform_dry_run=False, #!!!
-            target_dataloader=target_dataloader,
-            num_steps=0,
-            experiments={
-                "AdaConv/W+": (
-                    E1,
-                    add_hard_encoder_constraint(WPlusVariable, 0.0, 0.0),
-                ),
-                "AdaIN/W": (
-                    E1,
-                    add_hard_encoder_constraint(WVariable, 0.0, 0.0),
-                ),
-                "AdaIN/W+": (
-                    E1,
-                    add_hard_encoder_constraint(WPlusVariable, 0.0, 0.0),
-                ),
-            },
-            criterion=VGGCriterion(),
-            create_optimizer=lambda params: torch.optim.Adam(params, lr=0.02),
-        )
-        create_artifacts(timestamp, evaluations)
 
 ## artifact generation
-# todo understand how to cache eval methods -> we want to pull creating the FID metric outside of the first pass
+# todo create a script that resumes from compute_metrics
+
+## code quality
+# todo label the phases more clearly (right now there are a bunch of tqdm bars, not clear)
+# todo clear memory between runs? with the encoder, memory usage gets quite high
+# todo split regen script into a separate script
+# todo review the need for table_stat
 
 ## interpolation realism
 # todo fix interpolation realism tqdm
@@ -69,4 +61,3 @@ if __name__ == "__main__":
 
 ## reconstruction quality
 # todo add a plot for for regularization penalty, or the L2 distance to mean
-

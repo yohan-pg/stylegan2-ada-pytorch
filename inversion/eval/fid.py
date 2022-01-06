@@ -5,7 +5,6 @@ from .eval import *
 sys.path.append("vendor/FID_IS_infinity")
 
 from pytorch_fid.fid_score import calculate_fid_given_paths
-
 # from score_infinity import calculate_FID_infinity_path
 
 

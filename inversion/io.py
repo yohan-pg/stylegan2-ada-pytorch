@@ -174,9 +174,9 @@ class RealDataloader(InversionDataloader):
         return len(self.dataset) // self.batch_size
 
     def subset(self, max_images: int) -> "RealDataloader":
-        return RealDataloader(
-            self.dataset_path, self.batch_size, max_images, self.seed
-        )
+        kwargs = dataclasses.asdict(self)
+        kwargs["max_images"] = max_images
+        return RealDataloader(**kwargs)
 
     def serialize(self, path: str):
         with open(f"{path}/dataloader.txt", "w") as f:

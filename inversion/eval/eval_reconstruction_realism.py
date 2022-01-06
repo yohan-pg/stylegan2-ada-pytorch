@@ -6,16 +6,9 @@ from .fid import *
 
 
 class EvalReconstructionRealism(Evaluation):
-    name: ClassVar[str] = "Reconstruction Realism"
-
     table_stat: str = "FID"
 
-    @torch.no_grad()
-    def eval(self, experiment_name: str, dataloader: InvertedDataloader) -> Result:
-        path = self.save_images(experiment_name, dataloader)
-        return {"FID": compute_fid(dataloader, path)}
-
-    def save_images(self, experiment_name: str, dataloader: InvertedDataloader) -> str:
+    def produce_images(self, experiment_name: str, dataloader: InvertedDataloader) -> str:
         print("Saving Reconstruction images...")
 
         path = f"{self.out_dir}/{experiment_name}"
@@ -23,6 +16,9 @@ class EvalReconstructionRealism(Evaluation):
             save_image(image.unsqueeze(0), f"{path}/{i}_{j}.png")
 
         return path
+
+    def compute_metrics(self, dataloader: InvertedDataloader, images_path: str) -> dict:
+        return {"FID": compute_fid(dataloader, images_path)}
 
     def all_images(self, dataloader: InversionDataloader):
         for i, inversion in enumerate(dataloader):

@@ -10,18 +10,22 @@ Results = Dict[str, Result]
 
 
 class Evaluation:
-    name: ClassVar[str]
+    def produce_images(self, experiment_name: str, dataloader: InvertedDataloader) -> str:
+        raise NotImplementedError
 
-    def __init__(self, timestamp: datetime):
-        self.timestamp = timestamp
-        self.artifacts_dir = f"evaluation-runs/{self.timestamp}/artifacts/{self.name.lower().replace(' ', '_')}"
-        self.out_dir = self.artifacts_dir.replace("/artifacts/", "/inversion/")
-
-    def eval(self, experiment_name: str, dataloader: InvertedDataloader) -> Result:
+    def compute_metrics(self, dataloader: InvertedDataloader, images_path: str) -> dict:
         raise NotImplementedError
 
     def create_artifacts(self, target_dataloader: RealDataloader):
         raise NotImplementedError
+    
+    def __init__(self, timestamp: datetime):
+        self.timestamp = timestamp
+        self.artifacts_dir = f"evaluation-runs/{self.timestamp}/artifacts/{self.name.lower().replace(' ', '_')}"
+        self.out_dir = self.artifacts_dir.replace("/artifacts/", "/inversions/")
+
+    def eval(self, experiment_name: str, dataloader: InvertedDataloader) -> Result:
+        return self.compute_metrics(dataloader, self.produce_images(experiment_name, dataloader))
 
     def run(self, dataloaders: Dict[str, InvertedDataloader]) -> Results:
         target_dataloader = next(iter(dataloaders.values())).target_dataloader
@@ -52,6 +56,10 @@ class Evaluation:
     __call__ = run
 
     table_stat: str = "losses"
+
+    def __init_subclass__(cls) -> None:
+        # * Converts the class name into a name with spaces
+        cls.name = ''.join(list(map(lambda x: x if x.islower() else " " + x, cls.__name__))).replace("Eval ", "")
 
     def make_table(self, results) -> None:
         file_path = f"{self.artifacts_dir}/table.txt"
