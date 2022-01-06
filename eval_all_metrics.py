@@ -2,8 +2,7 @@ from inversion import *
 from inversion.eval import *
 
 
-RESUME_FROM_TIMESTAMP = None
-
+RESUME_FROM_PATH = None #"evaluation-runs/2022-01-06_14:52:43" #None 
 
 if __name__ == "__main__":
     evaluations = [
@@ -15,21 +14,22 @@ if __name__ == "__main__":
     target_dataloader = RealDataloader(
         "datasets/afhq2_cat256_test.zip",
         batch_size=4,
-        max_images=100,
+        max_images=8,
         fid_data_path="datasets/afhq2_cat256",
         seed=0,
     )
 
-    if RESUME_FROM_TIMESTAMP is not None:
-        create_artifacts(RESUME_FROM_TIMESTAMP, target_dataloader, evaluations)
+    if RESUME_FROM_PATH is not None:
+        print(f"Resuming from {RESUME_FROM_PATH}...")
+        create_artifacts("/".join(RESUME_FROM_PATH.split("/")[1:]), target_dataloader, evaluations)
     else:
         E1 = open_encoder(
             "encoder-training-runs/encoder_0.1/encoder-snapshot-000100.pkl"
         )
         timestamp = run_eval(
-            label="hi",
+            label=None,
             evaluations=evaluations,
-            perform_dry_run=True,
+            perform_dry_run=False, #!!!
             target_dataloader=target_dataloader,
             num_steps=0,
             experiments={
@@ -52,7 +52,6 @@ if __name__ == "__main__":
         create_artifacts(timestamp, target_dataloader, evaluations)
 
 
-
 ## interpolation realism
 # todo fix interpolation realism tqdm
 # todo avoid such extreme no. of pairs in interpolation realism. subset the second loader?
@@ -70,3 +69,7 @@ if __name__ == "__main__":
 ## folder structure
 # todo uniformize realism folder structure (recon & interpolation)
 # todo make sure we don't need to split images into subfolders to avoid lag
+
+## reconstruction quality
+# todo add a plot for for regularization penalty, or the L2 distance to mean
+

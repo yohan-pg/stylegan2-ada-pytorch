@@ -50,9 +50,9 @@ def run_eval(
                 ),
             )
 
-        for evaluation in evaluations:
-            print("\n🧮", evaluation.name, flush=True)
-            evaluation(timestamp)(dataloaders)
+            for evaluation in evaluations:
+                print("\n🧮", evaluation.name, flush=True)
+                evaluation(timestamp)(dataloaders)
 
     return timestamp
 
@@ -64,10 +64,10 @@ def create_eval_directory(label: Optional[str], dry_run: bool) -> str:
         timestamp = "_dry_run"
     else:
         timestamp = str(datetime.now()).split(".")[0].replace(" ", "_")
-        timestamp = label + "/" + timestamp if label is not None else label
-
+        timestamp = label + "/" + timestamp if label is not None else timestamp
 
     fresh_dir(f"evaluation-runs/{timestamp}")
+
     shutil.copyfile(sys.argv[0], f"evaluation-runs/{timestamp}/config.txt")
 
     return timestamp
@@ -76,14 +76,18 @@ def create_eval_directory(label: Optional[str], dry_run: bool) -> str:
 def create_artifacts(
     timestamp: str, target_dataloader: RealDataloader, evaluations: List[Evaluation]
 ) -> None:
-    for evaluation in evaluations:
-        evaluation(timestamp).create_artifacts(target_dataloader)
+    fresh_dir(f"evaluation-runs/{timestamp}/artifacts")
+
+    for evaluation_type in evaluations:
+        evaluation = evaluation_type(timestamp)
+        fresh_dir(evaluation.artifacts_dir)
+        evaluation.create_artifacts(target_dataloader)
+    
     join_evaluation_tables(timestamp)
 
 
 def join_evaluation_tables(timestamp: str) -> None:
-    os.chdir(f"evaluation-runs/{timestamp}")
-    
+    os.chdir(f"evaluation-runs/{timestamp}/artifacts")
     print("\n-------------------")
     print("\n👌\n")
     

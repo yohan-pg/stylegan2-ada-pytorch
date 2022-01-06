@@ -12,12 +12,10 @@ Results = Dict[str, Result]
 class Evaluation:
     name: ClassVar[str]
 
-    @property
-    def out_dir(self):
-        return f"evaluation-runs/{self.timestamp}/{self.name.lower().replace(' ', '_')}"
-
     def __init__(self, timestamp: datetime):
         self.timestamp = timestamp
+        self.artifacts_dir = f"evaluation-runs/{self.timestamp}/artifacts/{self.name.lower().replace(' ', '_')}"
+        self.out_dir = self.artifacts_dir.replace("/artifacts/", "/inversion/")
 
     def eval(self, experiment_name: str, dataloader: InvertedDataloader) -> Result:
         raise NotImplementedError
@@ -56,13 +54,17 @@ class Evaluation:
     table_stat: str = "losses"
 
     def make_table(self, results) -> None:
-        file_path = f"{self.out_dir}/table.txt"
+        file_path = f"{self.artifacts_dir}/table.txt"
 
         with open(file_path, "w") as file:
             print(f"## {self.name}", file=file)
             max_len_name = max(map(len, results.keys()))
             for experiment_name, result in results.items():
-                std = f"+- {result[self.table_stat].std().item():.04f}" if result[self.table_stat].ndim > 1 else ""
+                std = (
+                    f"+- {result[self.table_stat].std().item():.04f}"
+                    if result[self.table_stat].ndim > 1
+                    else ""
+                )
                 print(
                     f"{experiment_name.ljust(max_len_name + 1, ' ')}: {result[self.table_stat].mean().item():.04f} {std}",
                     file=file,
@@ -83,7 +85,7 @@ class Evaluation:
             plt.xlim(left=0)
             plt.title(f"{self.name} Loss Distribution")
             plt.legend(names)
-            name = f"{self.out_dir}/histogram_{group_name}"
+            name = f"{self.artifacts_dir}/histogram_{group_name}"
             plt.savefig(f"{name}.svg")
             plt.savefig(f"{name}.png")
 
@@ -146,6 +148,6 @@ class Evaluation:
             plt.xlabel("Optimization Step")
             plt.ylabel("Reconstruction Error")
             plt.ylim(0)
-            name = f"{self.out_dir}/plot_{group_name}"
+            name = f"{self.artifacts_dir}/plot_{group_name}"
             plt.savefig(f"{name}.svg")
             plt.savefig(f"{name}.png")
