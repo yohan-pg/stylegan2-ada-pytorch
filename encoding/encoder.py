@@ -1,5 +1,5 @@
 from inversion import *
-from .stylegan_encoder_network import *
+from encoding.stylegan_encoder_network import *
 from training.loss import StyleGAN2EncoderLoss
 
 import itertools
@@ -21,18 +21,16 @@ class Encoder(nn.Module):
         beta_1: float = 0.0,
         beta_2: float = 0.999,
         const_noise: bool = True,
-        fine_tune_discriminator: bool = False,
         discriminator_weight: float = 0.1,
         distance_weight: float = 1.0,
         mean_regularization_weight: float = 0.0,
+        discriminate_interpolations: bool = False,
         **kwargs,
     ):
         super().__init__()
         self.fine_tune_discriminator = discriminator_weight > 0.0
         self.G = [G]
         self.D = [D]
-        D.train()
-        D.requires_grad_(True)
         self.network = nn.parallel.DataParallel(
             StyleGANEncoderNet.configure_for(
                 G,
@@ -42,10 +40,12 @@ class Encoder(nn.Module):
         )
         self.mean = G.mapping.w_avg.reshape(1, 1, G.w_dim)
         self.mean_regularization_weight = mean_regularization_weight
+        self.discriminate_interpolations = discriminate_interpolations
 
-        if fine_tune_discriminator:
+        if self.fine_tune_discriminator:
             D.train()
             D.requires_grad_(True)
+            
         self.optimizer = torch.optim.Adam(
             list(self.parameters()) + list(D.parameters()),
             lr=lr,
@@ -67,7 +67,9 @@ class Encoder(nn.Module):
         self.distance_weight = distance_weight
 
     def backprop_discr(self, real: torch.Tensor, preds: torch.Tensor, var: Variable):
-        #! sync is unimplemented; it class does not work with DistributedDataParallel
+        # if self.discriminate_interpolations:
+        #     var = var.interpolate(var.roll(1), torch.rand(len(var), 1, 1).to(var.data.device) / 2)
+        #! sync is unimplemented; this class does not work with DistributedDataParallel
         self.sg2_loss.accumulate_gradients_encoder(
             "Dboth", real, var.detach(), sync=False, gain=self.discriminator_weight
         )

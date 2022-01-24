@@ -1,0 +1,5 @@
+import figures.scripts.generation_quality_figure
+import figures.scripts.encoder_quality_figure
+import figures.scripts.full_inversion_quality_figure
+import figures.scripts.interpolation_quality_figure
+# import figures.scripts.singular_values_figure 

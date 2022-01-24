@@ -167,23 +167,7 @@ class Edit(nn.Module):
                         f"out/{self.name}/fing.png",
                         nrow=len(target),
                     )
-
-                    # breakpoint()
-                    # x = E(pasting)
-                    # for i in range(30):
-                    #     with torch.no_grad():
-                    #         x = E(self.paste(x.to_image(), target))
-                    # save_image(
-                    #     torch.cat(
-                    #         (
-                    #             E(pasting).to_image(),
-                    #             x.to_image(),
-                    #         )
-                    #     ),
-                    #     f"out/{self.name}/npasting.png",
-                    #     nrow=len(target),
-                    # )
-
+                    
                     save_image(
                         torch.cat(
                             (

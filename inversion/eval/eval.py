@@ -27,7 +27,7 @@ class Evaluation:
     def eval(self, experiment_name: str, dataloader: InvertedDataloader) -> Result:
         return self.compute_metrics(dataloader, self.produce_images(experiment_name, dataloader))
 
-    def run(self, dataloaders: Dict[str, InvertedDataloader]) -> Results:
+    def __call__(self, dataloaders: Dict[str, InvertedDataloader]) -> Results:
         target_dataloader = next(iter(dataloaders.values())).target_dataloader
         for dataloader in dataloaders.values():
             assert dataloader.target_dataloader is target_dataloader
@@ -53,13 +53,12 @@ class Evaluation:
 
         return results
 
-    __call__ = run
 
     table_stat: str = "losses"
 
     def __init_subclass__(cls) -> None:
         # * Converts the class name into a name with spaces
-        cls.name = ''.join(list(map(lambda x: x if x.islower() else " " + x, cls.__name__))).replace("Eval ", "")
+        cls.name = ''.join(list(map(lambda x: x if x.islower() else " " + x, cls.__name__))).replace(" Eval ", "")
 
     def make_table(self, results) -> None:
         file_path = f"{self.artifacts_dir}/table.txt"

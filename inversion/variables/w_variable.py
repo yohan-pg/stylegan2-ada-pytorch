@@ -1,6 +1,15 @@
 from .variable import *
 
 
+def force_overparameterize(G_or_E):
+    if G_or_E.__class__.__name__ == "Encoder":
+        G = G_or_E.G[0]
+    else:
+        G = G_or_E
+    G.use_adaconv = True 
+    G.mapping.use_adaconv = True 
+
+
 class WVariable(Variable):
     space_name = "W"
     default_lr = 0.1
@@ -240,7 +249,7 @@ def add_soft_encoder_constraint_image_space(
 
 def add_hard_encoder_constraint(
     cls,
-    alpha=1.0,
+    alpha=0.0,
     truncation=0.0,
     paste=lambda x: x,
     encoder_init=True,

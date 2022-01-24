@@ -3,21 +3,22 @@ from encoding import *
 from datetime import datetime
 
 ## todo must haves
-# todo try to add a w_mean regularization, in order to make interpolation work again? 
-# todo measure optimization quality vs the baseline
-# todo why does the single layer fail again?
-# todo vectorize w+
+# todo try IID machines
+# todo try a chunking version of splitter
+# todo chunking splitter is too slow -> vectorize
 
 ## todo to test eventually
-# todo find a better solution for w+? why is it so bad?
+# todo data augmentation? we are overfitting. try ffhq first tho -> at least x flips
 # todo try training with a larger batch size. Is the quality better?
+# todo find a better solution for w+? why is it so bad?
 # todo try increasing the final style size. going from a single 512 vector to 512 other vectors of the same size is a bit crazy
 # todo try a better architecture (residual?)
 # todo try encoding fakes instead? can we get that perfect?
 # todo review ID invert training parameters
 # todo hyperparam search for the ideal discr_weight
 
-NAME = "encoder_0.0"
+
+NAME = "encoder_sanity_check"
 METHOD, PKL_PATH = "adaconv", f"pretrained/no_torgb_adaconv_tmp.pkl"
 
 GAIN = 1.0 
@@ -25,10 +26,10 @@ VARIABLE_TYPE = WVariable
 LEARNING_RATE = 1e-3
 
 BATCH_SIZE = 4
-SUBSET_SIZE = None 
+SUBSET_SIZE = None
 DIST_WEIGHT = 1.0
 DISCR_WEIGHT = 0.1
-MEAN_REG = 1.0 
+MEAN_REG = 0.0 
 
 OUTDIR = f"encoder-training-runs/{NAME}/" + str(datetime.now()).split(".")[0].replace(
     " ", "_"
@@ -50,7 +51,6 @@ if __name__ == "__main__":
         discriminator_weight=DISCR_WEIGHT,
         distance_weight=DIST_WEIGHT,
         mean_regularization_weight=MEAN_REG,
-        single_layer_adaconv=False
     )
 
     vgg = VGGCriterion()
@@ -69,6 +69,8 @@ if __name__ == "__main__":
     writer = launch_tensorboard(OUTDIR)
 
     print("Starting training...")
+
+    shutil.copyfile(__file__, OUTDIR + "/launch_config.py")
     for i, (preds, targets, loss) in enumerate(
         tqdm.tqdm(encoder.fit(loader, criterion))
     ):

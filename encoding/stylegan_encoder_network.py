@@ -23,6 +23,102 @@ _RESOLUTIONS_ALLOWED = [8, 16, 32, 64, 128, 256, 512, 1024]
 _INIT_RES = 4
 
 
+class Splitter(nn.Module):
+    def __init__(self, num_style_vectors, w_space_dim, out_channels, num_ws):
+        super().__init__()
+        self.heads = nn.Parameter(
+            torch.randn(
+                num_style_vectors,
+                w_space_dim,
+                out_channels,
+            ).cuda()
+        )
+
+        with torch.no_grad():
+            self.heads /= math.sqrt((out_channels + w_space_dim) / 2)
+
+        assert not num_ws > 1
+
+    def forward(self, x):
+        return (self.heads @ x.t()).transpose(2, 1).transpose(1, 0)
+
+
+class MultiLinear(nn.Module):
+    def __init__(self, num_lanes, input_size, output_size):
+        super().__init__()
+        self.heads = nn.Parameter(
+            torch.randn(
+                num_lanes,
+                input_size,
+                output_size,
+            ).cuda()
+        )
+        self.bias = nn.Parameter(torch.zeros(output_size).cuda())
+
+        with torch.no_grad():
+            self.heads /= math.sqrt(output_size)
+
+    def forward(self, x):
+        return (self.heads @ x.t()).transpose(2, 1).transpose(1, 0)
+
+
+class SingleLayerSplitter(nn.Module):
+    def __init__(self, num_style_vectors, w_space_dim, out_channels, num_ws):
+        super().__init__()
+        self.num_style_vectors = num_style_vectors
+        self.w_space_dim = w_space_dim
+        self.num_ws = num_ws
+        self.layers = nn.ParameterList([
+            nn.Sequential(
+                nn.Linear(out_channels, out_channels // num_ws),
+                nn.Linear(out_channels // num_ws, num_style_vectors * w_space_dim),
+            ).cuda()
+            for _ in range(num_ws)
+        ])
+
+        for layer in self.layers:
+            with torch.no_grad():
+                nn.init.zeros_(layer[0].bias)
+                nn.init.normal_(layer[0].weight)
+                layer[0].weight /= math.sqrt(out_channels)
+
+                nn.init.zeros_(layer[-1].bias)
+                nn.init.normal_(layer[-1].weight)
+                layer[-1].weight /= math.sqrt(out_channels // num_ws)  #!!!
+
+    def forward(self, x):
+        return torch.cat(
+            [
+                layer(x).reshape(-1, self.num_style_vectors, self.w_space_dim)
+                for layer in self.layers
+            ],
+            dim=1,
+        )
+
+
+class ChunkingSplitter(nn.Module):
+    def __init__(
+        self, num_style_vectors, w_space_dim, out_channels, num_ws, chunk_size=512 #!!! should be lower
+    ):
+        super().__init__()
+        self.num_style_vectors = num_style_vectors
+        self.w_space_dim = w_space_dim
+        self.num_ws = num_ws
+        self.l1 = nn.Linear(
+            out_channels * num_style_vectors,
+            w_space_dim
+        )
+        self.l2 = Splitter(
+            num_style_vectors,
+            w_space_dim,
+            chunk_size,
+            1
+        )
+
+    def forward(self, x):
+        return self.l2(self.l1(x.unsqueeze(1).repeat(1, 512, 1)))
+
+
 @persistence.persistent_class
 class StyleGANEncoderNet(nn.Module):
     """Defines the encoder network for StyleGAN inversion.
@@ -51,7 +147,7 @@ class StyleGANEncoderNet(nn.Module):
         use_wscale=True,
         w_plus=True,
         use_bn=True,
-        single_layer_adaconv=False,
+        splitter=Splitter,
         num_ws: int = 1,
     ):
         """Initializes the encoder with basic settings.
@@ -90,7 +186,6 @@ class StyleGANEncoderNet(nn.Module):
         self.num_blocks = int(np.log2(resolution))
         # Layers used in generator.
         self.num_layers = int(np.log2(self.resolution // self.init_res * 2)) * 2
-        self.single_layer_adaconv = single_layer_adaconv
 
         in_channels = self.image_channels
         out_channels = self.encoder_channels_base
@@ -123,9 +218,7 @@ class StyleGANEncoderNet(nn.Module):
                 )
 
                 if num_style_vectors > 1:
-                    self.heads = (
-                        SingleLayer if self.single_layer_adaconv else Splitter
-                    )(
+                    self.heads = splitter(
                         num_style_vectors,
                         w_space_dim,
                         out_channels,
@@ -174,62 +267,6 @@ class StyleGANEncoderNet(nn.Module):
             )
 
         return self._forward(x)
-
-
-class Splitter(nn.Module):
-    def __init__(self, num_style_vectors, w_space_dim, out_channels, num_ws):
-        super().__init__()
-        self.heads = nn.Parameter(
-            torch.randn(
-                num_style_vectors,
-                w_space_dim,
-                out_channels,
-            )
-        )
-
-        with torch.no_grad():
-            self.heads /= math.sqrt((out_channels + w_space_dim) / 2)
-
-        assert not num_ws > 1
-
-    def forward(self, x):
-        return (self.heads @ x.t()).transpose(2, 1).transpose(1, 0)
-
-
-class SingleLayer(nn.Module):
-    def __init__(self, num_style_vectors, w_space_dim, out_channels, num_ws):
-        super().__init__()
-        self.num_style_vectors = num_style_vectors
-        self.w_space_dim = w_space_dim
-        self.num_ws = num_ws
-        self.layers = [
-            nn.Sequential(
-                nn.Linear(out_channels, out_channels // num_ws),
-                nn.Linear(out_channels // num_ws, num_style_vectors * w_space_dim),
-            ).cuda()
-            for _ in range(num_ws)
-        ]
-
-        for layer in self.layers:
-            with torch.no_grad():
-                nn.init.zeros_(layer[0].bias)
-                nn.init.normal_(layer[0].weight)
-                layer[0].weight /= math.sqrt(out_channels)
-
-                nn.init.zeros_(layer[-1].bias)
-                nn.init.normal_(layer[-1].weight)
-                layer[-1].weight /= math.sqrt(out_channels // num_ws)  #!!!
-
-    def forward(self, x):
-        return torch.cat(
-            [
-                layer(x).reshape(
-                    -1, self.num_style_vectors, self.w_space_dim
-                )
-                for layer in self.layers
-            ],
-            dim=1,
-        )
 
 
 class AveragePoolingLayer(nn.Module):

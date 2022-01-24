@@ -8,40 +8,48 @@ from .fid import compute_fid
 class EvalInterpolationRealism(Evaluation):
     table_stat: str = "FID"
 
+    @torch.no_grad()
     def produce_images(
         self, experiment_name: str, dataloader: InvertedDataloader
     ):
         print("Generating interpolation images...")
         fakes_path = f"{self.out_dir}/{experiment_name}/fakes"
 
-        for (i, j, k), (inversion, other_inversion) in tqdm.tqdm(
+        for (i, j), (inversion, other_inversion) in tqdm.tqdm(
             self.all_image_pairs(dataloader), total=self.num_image_pairs(dataloader)
         ):
             midpoint = (
-                inversion.final_variable.roll(k)
+                inversion.final_variable
                 .interpolate(other_inversion.final_variable, 0.5)
                 .to_image()
             )
+
+            os.makedirs(fakes_path, exist_ok=True)
+            for k, image in enumerate(midpoint):
+                save_image(
+                    image.unsqueeze(0),
+                    f"{fakes_path}/{i}_{j}_{k}.png",
+                )
+
             save_image(
                 torch.cat(
                     [
-                        inversion.target.roll(k, dims=[0]),
-                        inversion.final_pred.roll(k, dims=[0]),
+                        inversion.target,
+                        inversion.final_pred,
+                        inversion.final_variable
+                        .interpolate(other_inversion.final_variable, 0.25)
+                        .to_image(),
                         midpoint,
+                        inversion.final_variable
+                        .interpolate(other_inversion.final_variable, 0.75)
+                        .to_image(),
                         other_inversion.final_pred,
                         other_inversion.target,
                     ]
                 ),
-                f"{self.out_dir}/{experiment_name}/{i}_{j}_{k}.png",
+                f"{self.out_dir}/{experiment_name}/{i}_{j}.png",
                 nrow=len(inversion.final_pred),
             )
-
-            os.makedirs(fakes_path, exist_ok=True)
-            for l, image in enumerate(midpoint):
-                save_image(
-                    image.unsqueeze(0),
-                    f"{fakes_path}/{i}_{j}_{k}_{l}.png",
-                )
 
         return fakes_path
 
@@ -51,16 +59,12 @@ class EvalInterpolationRealism(Evaluation):
     def all_image_pairs(self, dataloader: InvertedDataloader):
         for i, inversion in enumerate(dataloader):
             for j, other_inversion in enumerate(dataloader):
-                if i <= j:
-                    for k in range(
-                        1 if i == j else 0, dataloader.target_dataloader.batch_size
-                    ):  # * Skips interpolating images with themselves
-                        yield (i, j, k), (inversion, other_inversion)
+                if i < j:
+                    yield (i, j), (inversion, other_inversion)
 
     def num_image_pairs(self, dataloader: InvertedDataloader):
-        n = len(dataloader) * dataloader.batch_size
-        return n * (n + 1) // 2
-        # 3 batches, 1 with 4 images and 2 with 3  = 10 total images
+        n = len(dataloader)
+        return n * (n - 1) // 2
 
     def create_artifacts(self, dataloaders: Dict[str, InvertedDataloader]):
         results = self.load_results_from_disk()

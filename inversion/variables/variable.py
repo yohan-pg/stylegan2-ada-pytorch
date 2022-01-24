@@ -20,6 +20,9 @@ class Variable(ToStyles, ABC, nn.Module, ParametrizableClass):
         self.G = [G]
         self.data = data
 
+    def __len__(self):
+        return len(self.data)
+
     def from_data(self, data):
         return self.__class__(self.G[0], data)
 

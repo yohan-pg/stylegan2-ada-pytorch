@@ -10,7 +10,7 @@ if False:
 else:
     METHOD = "adaconv"
     # PATH = "pretrained/ffhq.pkl"
-    PATH = "encoder-training-runs/encoder_0.1/encoder-snapshot-000100.pkl"
+    PATH = "encoder-training-runs/encoder_0.0/2022-01-05_12:03:21/encoder-snapshot-000100.pkl"
 
 VARIABLE_TYPE = add_hard_encoder_constraint(WVariable, 0.0, 0.0, encoder_init=True)
 NUM_STEPS = 0

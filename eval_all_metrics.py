@@ -1,17 +1,15 @@
 from inversion.eval import *
 
-evaluations = [
-    EvalReconstructionQuality,
-    EvalReconstructionRealism,
-    EvalInterpolationRealism,
-]
-
 run_eval(
-    label=None,
-    evaluations=evaluations,
-    perform_dry_run=True,
+    label="interpolation_enc_vs_hybrid",
+    perform_dry_run=False,
+    evaluations=[
+        EvalReconstructionQuality,
+        EvalInterpolationRealism,
+        # EvalReconstructionRealism,
+    ],
     target_dataloader=RealDataloader(
-        "datasets/afhq2_cat256_test.zip",
+        "datasets/afhq2_cat256.zip",  #!!! _test
         batch_size=4,
         max_images=8,
         fid_data_path="datasets/afhq2_cat256",
@@ -19,26 +17,21 @@ run_eval(
     ),
     num_steps=0,
     experiments={
-        "AdaConv/W+": (
+        "AdaConv": (
             open_encoder(
-                "encoder-training-runs/encoder_0.1/encoder-snapshot-000100.pkl"
+                "encoder-training-runs/encoder_0.0/2022-01-05_12:03:21/encoder-snapshot-000150.pkl"
             ),
-            add_hard_encoder_constraint(WPlusVariable, 0.0, 0.0),
+            add_hard_encoder_constraint(WVariable, 0.0, 0.00),
         ),
-        # "AdaIN/W": (
-        #     open_encoder(
-        #         "encoder-training-runs/encoder_0.1/encoder-snapshot-000100.pkl"
-        #     ),
-        #     add_hard_encoder_constraint(WVariable, 0.0, 0.0),
-        # ),
     },
-    criterion=VGGCriterion(),
     create_optimizer=lambda params: torch.optim.Adam(params, lr=0.02),
 )
 
+## bugs
+#! dry run overwrites my real stuff now?
 
 ## artifact generation
-# todo create a script that resumes from compute_metrics
+# todo create the eval_again script
 
 ## code quality
 # todo label the phases more clearly (right now there are a bunch of tqdm bars, not clear)
@@ -46,14 +39,13 @@ run_eval(
 # todo split regen script into a separate script
 # todo review the need for table_stat
 
-## interpolation realism
-# todo fix interpolation realism tqdm
-# todo avoid such extreme no. of pairs in interpolation realism. subset the second loader?
-#!!! interpolation generates WAY too many images, I don't understand
-
-## determinism
+## evaluation determinism
 # todo does not appear to be deterministic for a given seed
 # todo verify that it is stable for 2 seeds (low variance)
+# todo verify consistency with the eval_encoder script
+
+## interpolation realism
+# todo cap the max number of images -> we need to cap at, say, 50k. Is this realistic with batching or not?
 
 ## folder structure
 # todo uniformize realism folder structure (recon & interpolation)

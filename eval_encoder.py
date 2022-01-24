@@ -10,7 +10,7 @@ STATS_PATH = "datasets/afhq2_cat256_stats.npz"
 MIN_FAKE = 100
 
 if __name__ == "__main__":
-    E = open_encoder("encoder-training-runs/encoder_0.0/2022-01-05_12:03:21/encoder-snapshot-000050.pkl")
+    E = open_encoder("encoder-training-runs/encoder_0.0/2022-01-05_12:03:21/encoder-snapshot-000100.pkl")
     E.eval()
 
     shutil.rmtree(TMP_DIR, ignore_errors=True)

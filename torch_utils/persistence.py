@@ -239,6 +239,7 @@ def _src_to_module(src):
         sys.modules[module_name] = module
         _module_to_src_dict[module] = src
         _src_to_module_dict[src] = module
+        src = src.replace("from .stylegan_encoder_network import *", "from encoding.stylegan_encoder_network import *") #!!! temporary hack
         exec(src, module.__dict__)  # pylint: disable=exec-used
     return module
 

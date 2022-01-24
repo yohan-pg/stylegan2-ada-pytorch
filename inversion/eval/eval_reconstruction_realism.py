@@ -8,6 +8,7 @@ from .fid import *
 class EvalReconstructionRealism(Evaluation):
     table_stat: str = "FID"
 
+    @torch.no_grad()
     def produce_images(self, experiment_name: str, dataloader: InvertedDataloader) -> str:
         print("Saving Reconstruction images...")
 

@@ -34,7 +34,11 @@ def open_generator_and_discriminator(pkl_path: str):
 
     with dnnlib.util.open_url(pkl_path) as fp:
         pkl = legacy.load_network_pkl(fp)
-        return (pkl["G_ema"].cuda().eval(), pkl["D"].cuda().eval(), pkl["training_set_kwargs"])
+        return (
+            pkl["G_ema"].cuda().eval(),
+            pkl["D"].cuda().eval(),
+            pkl["training_set_kwargs"],
+        )
 
 
 def open_encoder(pkl_path: str):
@@ -50,6 +54,7 @@ def open_generator(pkl_path: str):
 
     with dnnlib.util.open_url(pkl_path) as fp:
         return legacy.load_network_pkl(fp)["G_ema"].cuda().eval().float()
+
 
 # todo fuse with open-gen
 def open_discriminator(pkl_path: str):
@@ -88,6 +93,7 @@ def to_G(G_or_E):
         return G_or_E.G[0]
     else:
         return G_or_E
+
 
 def open_target(G_or_E, *paths: str):
     G = to_G(G_or_E)
@@ -155,10 +161,10 @@ class InversionDataloader:
 class RealDataloader(InversionDataloader):
     dataset_path: str
     batch_size: int
-    max_images: Optional[int]
+    max_images: Optional[int] = None
     seed: int = 0
     fid_data_path: str = None
-    
+
     name: ClassVar[str] = "real"
 
     def __post_init__(self):
@@ -194,7 +200,7 @@ class RealDataloader(InversionDataloader):
 
         def loader_transform():
             for img, _ in inner_loader:
-                yield img.cuda() / 255
+                yield img.cuda() / 255.0
 
         return loader_transform()
 
@@ -230,12 +236,11 @@ class InvertedDataloader:
         self.target_dataloader = target_dataloader
         self.batch_size = self.target_dataloader.batch_size
         self.max_images = self.target_dataloader.max_images
-        
+
         print("Inverting Dataset...")
         for target in tqdm.tqdm(target_dataloader):
             inversion = inverter(target).purge()
             self.inversions.append(inversion)
-
 
     def __len__(self):
         return len(self.target_dataloader)
@@ -251,17 +256,16 @@ class InvertedDataloader:
 class Parallelize:
     def __init__(self, module: nn.Module):
         self.module = module
-        
+
         if module.__class__.__name__ == "Encoder":
             self.data_parallel = module
             if not isinstance(module.network, nn.DataParallel):
                 module.network = nn.DataParallel(module.network)
         elif module.__class__.__name__ == "Generator":
             self.data_parallel = nn.DataParallel(module)
-        
+
     def __getattr__(self, name: str):
         return getattr(self.module, name)
 
     def __call__(self, *args, **kwargs):
         return self.data_parallel(*args, **kwargs)
-    

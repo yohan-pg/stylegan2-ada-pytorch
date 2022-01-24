@@ -52,9 +52,9 @@ def run_eval(
                 ),
             )
 
-            for evaluation in evaluations:
-                print("\n🧮", evaluation.name, flush=True)
-                evaluation(timestamp)(dataloaders)
+        for evaluation in evaluations:
+            print("\n🧮", evaluation.name, flush=True)
+            evaluation(timestamp)(dataloaders)
 
     create_artifacts(timestamp, evaluations)
     

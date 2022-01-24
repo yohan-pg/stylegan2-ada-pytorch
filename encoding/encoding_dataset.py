@@ -6,19 +6,24 @@ from torch_utils import misc
 class EncodingDataset:
     def __init__(self, path: str):
         self.dataset = dnnlib.util.construct_class_by_name(
-            class_name="training.dataset.ImageFolderDataset",
-            path=path,
+            class_name="training.dataset.ImageFolderDataset", path=path, xflip=True
         )
 
     def __len__(self):
         return len(self.dataset)
 
     def to_loader(
-        self, batch_size: int, subset_size: Optional[int] = None, step: int = 5, offset: int = 1, infinite=True
-    ): 
+        self,
+        batch_size: int,
+        subset_size: Optional[int] = None,
+        step: int = 5,
+        offset: int = 1,
+        infinite=True,
+    ):
         subset = (
             torch.utils.data.Subset(
-                self.dataset, [((x * step) + offset) % len(self) for x in range(subset_size)]
+                self.dataset,
+                [((x * step) + offset) % len(self) for x in range(subset_size)],
             )
             if subset_size is not None
             else self.dataset
@@ -26,10 +31,12 @@ class EncodingDataset:
 
         for targets, _ in torch.utils.data.DataLoader(
             subset,
-            sampler=misc.InfiniteSampler(dataset=subset, shuffle=False) if infinite else None,
+            sampler=misc.InfiniteSampler(dataset=subset, shuffle=True)
+            if infinite
+            else None,
             batch_size=batch_size,
             pin_memory=True,
-            num_workers=3, 
-            prefetch_factor=2
+            num_workers=3,
+            prefetch_factor=2,
         ):
             yield (targets / 255.0).cuda()

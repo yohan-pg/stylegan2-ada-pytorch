@@ -8,7 +8,6 @@ class EvalReconstructionQuality(Evaluation):
     def produce_images(self, experiment_name: str, dataloader: InvertedDataloader) -> str:
         images_path = f"{self.out_dir}/{experiment_name}"
         fresh_dir(f"{images_path}/raw_images")
-
         for i, inversion in tqdm.tqdm(enumerate(dataloader), total=len(dataloader)):
             save_image(
                 torch.cat(
