@@ -17,9 +17,6 @@ from torch_utils.ops import fma
 import torch.nn.functional as F
 import math
 
-DISABLE_NOISE = True
-INJECT_IN_TORGB = False
-
 
 # ----------------------------------------------------------------------------
     
@@ -302,7 +299,7 @@ class MappingNetwork(torch.nn.Module):
         w_avg_beta=0.995,  # Decay for tracking the moving average of W during training, None = do not track.
         sample_w_plus=False,
         use_adaconv=False,
-        freeze_mapper=False,
+        mapper_slowdown=False,
         num_adaconv_vectors=0,
         normalize_latent=False,
         div_by_sqrt=False
@@ -319,7 +316,7 @@ class MappingNetwork(torch.nn.Module):
         self.use_adaconv = use_adaconv
         self.num_adaconv_vectors = num_adaconv_vectors
         self.normalize_latent = normalize_latent
-        self.freeze_mapper = freeze_mapper
+        self.mapper_slowdown = mapper_slowdown
         self.div_by_sqrt = div_by_sqrt
 
         if embed_features is None:
@@ -341,7 +338,7 @@ class MappingNetwork(torch.nn.Module):
                 in_features,
                 out_features,
                 activation="linear" if num_layers == 1 else activation,
-                lr_multiplier=lr_multiplier,
+                lr_multiplier=lr_multiplier * (1 / self.mapper_slowdown),
             )
             setattr(self, f"fc{idx}", layer)
 
@@ -363,8 +360,6 @@ class MappingNetwork(torch.nn.Module):
             if self.z_dim > 0:
                 misc.assert_shape(z, [None, self.z_dim])
                 x = z.to(torch.float32)
-                if self.normalize_latent:
-                    x = normalize_2nd_moment(x)
             if self.c_dim > 0:
                 misc.assert_shape(c, [None, self.c_dim])
                 x = z.to(torch.float32)
@@ -410,6 +405,9 @@ class MappingNetwork(torch.nn.Module):
     def forward(self, z, c, **kwargs):
         assert self.num_ws is not None
 
+        if self.normalize_latent:
+            z = normalize_2nd_moment(z.reshape(z.shape[0], -1)).reshape(z.shape)
+
         with torch.autograd.profiler.record_function("broadcast"):
             if not self.use_adaconv:
                 return (
@@ -452,7 +450,8 @@ class SynthesisLayer(torch.nn.Module):
         conv_clamp=None,  # Clamp the output of convolution layers to +-X, None = disable clamping.
         channels_last=False,  # Use channels_last format for the weights?
         use_adaconv=False,
-        freeze_affine=False,
+        affine_slowdown=1.0,
+        bias_init=1.0,
     ):
         super().__init__()
         self.resolution = resolution
@@ -466,8 +465,9 @@ class SynthesisLayer(torch.nn.Module):
         self.padding = kernel_size // 2
         self.act_gain = bias_act.activation_funcs[activation].def_gain
         self.use_adaconv = use_adaconv
-        self.freeze_affine = freeze_affine
-        self.affine = FullyConnectedLayer(w_dim, in_channels, bias_init=1)
+        self.affine_slowdown = affine_slowdown
+        self.bias_init = bias_init
+        self.affine = FullyConnectedLayer(w_dim, in_channels, bias_init=self.bias_init, lr_multiplier=1/self.affine_slowdown)
 
         memory_format = (
             torch.channels_last if channels_last else torch.contiguous_format
@@ -553,7 +553,9 @@ class ToRGBLayer(torch.nn.Module):
         conv_clamp=None,
         channels_last=False,
         use_adaconv=False,
-        inject_in_torgb=False
+        inject_in_torgb=False,
+        affine_slowdown=1.0,
+        bias_init=1.0,
     ):
         super().__init__()
         self.conv_clamp = conv_clamp
@@ -561,8 +563,11 @@ class ToRGBLayer(torch.nn.Module):
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.inject_in_torgb = inject_in_torgb
+        self.bias_init = bias_init
+        
         if self.inject_in_torgb:
-            self.affine = FullyConnectedLayer(w_dim, in_channels, bias_init=1)
+            self.affine = FullyConnectedLayer(w_dim, in_channels, bias_init=self.bias_init, lr_multiplier=(1 / affine_slowdown))
+
         memory_format = (
             torch.channels_last if channels_last else torch.contiguous_format
         )
@@ -680,7 +685,9 @@ class SynthesisBlock(torch.nn.Module):
                 conv_clamp=conv_clamp,
                 channels_last=self.channels_last,
                 use_adaconv=self.use_adaconv,
-                inject_in_torgb=inject_in_torgb
+                inject_in_torgb=inject_in_torgb,
+                affine_slowdown=layer_kwargs['affine_slowdown'],
+                bias_init=layer_kwargs['bias_init'],
             )
             self.num_torgb += 1
 

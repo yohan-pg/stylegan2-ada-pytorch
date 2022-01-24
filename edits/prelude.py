@@ -5,7 +5,6 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from inversion import *
 
-
 #! add a distance to ground truth image
 
 #! todo remove pasting function
@@ -13,7 +12,6 @@ from inversion import *
 # todo refactor initialize method to another method which gives an example corruption
 # todo make sure the scaling factor is required
 # todo avoid passing a var by variable_type
-
 
 @dataclass(eq=False)
 class Edit(nn.Module):

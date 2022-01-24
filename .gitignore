@@ -3,6 +3,7 @@ __pycache__/
 
 /tmp/
 /eval/
+/cache/
 /datasets/
 /training-runs/
 /encoder-training-runs/
@@ -18,3 +19,4 @@ stylegan2.tar.gz
 
 /figures/out/
 /old/
+/slurm-*.out
